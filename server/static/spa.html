@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RFID 智能安防管控平台</title>
+<link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/@element-plus/icons-vue"></script>
+<script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+<script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+<style>
+:root{--el-color-primary:#818cf8;--el-menu-bg-color:#0f0f1a;--el-menu-text-color:#94a3b8;--el-menu-hover-bg-color:rgba(129,140,248,.08);
+  --glass-bg:rgba(15,15,26,.7);--glass-border:rgba(255,255,255,.06);--glass-hover:rgba(255,255,255,.04);
+  --text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;
+  --accent-1:#818cf8;--accent-2:#22d3ee;--accent-3:#34d399;--accent-4:#fbbf24;--accent-5:#f472b6;--danger:#ef4444;
+  --radius-sm:10px;--radius-md:16px;--radius-lg:24px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);--shadow-md:0 8px 32px rgba(0,0,0,.4);--shadow-glow:0 0 40px rgba(129,140,248,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#06060f;
+  color:var(--text-primary);
+  font-family:"Inter",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+/* ---- Animated Background ---- */
+body::before{
+  content:'';position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(129,140,248,.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 80% 100%, rgba(34,211,238,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 30%, rgba(244,114,182,.04) 0%, transparent 50%),
+    #06060f;
+}
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;
+  background:url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='30' cy='30' r='.5' fill='rgba(255,255,255,.03)'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23g)' width='100%25' height='100%25'/%3E%3C/svg%3E");
+  opacity:.6;pointer-events:none;
+}
+/* ---- Layout ---- */
+.el-container{min-height:100vh}
+.el-aside{
+  background:var(--glass-bg);backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  border-right:1px solid var(--glass-border);overflow:hidden;z-index:10;
+}
+.el-menu{background:transparent;border-right:none;padding:.5rem 0}
+.el-menu-item,.el-sub-menu__title{
+  color:var(--text-secondary);font-size:13.5px;font-weight:500;
+  margin:2px 12px;border-radius:10px;padding:10px 14px!important;
+  transition:all .25s cubic-bezier(.4,0,.2,1);height:auto!important;line-height:1.5!important;
+}
+.el-menu-item:hover{background:var(--glass-hover)!important;color:var(--text-primary);transform:translateX(3px)}
+.el-menu-item.is-active{
+  background:linear-gradient(135deg,rgba(129,140,248,.15),rgba(34,211,238,.08))!important;
+  color:#fff!important;border-left:none!important;font-weight:600;
+  box-shadow:inset 0 0 0 1px rgba(129,140,248,.2);
+}
+.logo{font-size:1.3rem;font-weight:800;padding:1.5rem 1.2rem 1rem;color:#fff;display:flex;align-items:center;gap:.35rem;letter-spacing:-.02em}
+.logo span{background:linear-gradient(135deg,var(--accent-1),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+/* ---- Cards ---- */
+.glass-card{
+  background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--glass-border);border-radius:var(--radius-md);
+  padding:1.5rem;transition:all .35s cubic-bezier(.4,0,.2,1);
+}
+.glass-card:hover{border-color:rgba(129,140,248,.25);box-shadow:var(--shadow-glow);transform:translateY(-2px)}
+.glass-card.interactive{cursor:pointer}
+.glass-card.interactive:active{transform:scale(.98)}
+.bento-grid{display:grid;gap:1rem}
+.stat-card{
+  background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--glass-border);border-radius:var(--radius-md);
+  padding:1.5rem;transition:all .35s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;
+}
+.stat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent-1),transparent);opacity:0;transition:opacity .3s;
+}
+.stat-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
+.stat-card:hover::before{opacity:1}
+.stat-value{font-size:2.4rem;font-weight:800;letter-spacing:-.02em;line-height:1}
+.stat-label{color:var(--text-muted);font-size:.82rem;margin-top:.4rem;font-weight:500}
+.env-card{
+  text-align:center;padding:1.8rem 1rem;border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  transition:all .3s;position:relative;overflow:hidden;
+}
+.env-card::after{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(ellipse at center,var(--accent-1) 0%,transparent 100%);opacity:0;transition:opacity .3s}
+.env-card:hover::after{opacity:.04}
+.env-card:hover{border-color:rgba(129,140,248,.3);transform:translateY(-2px)}
+.env-val{font-size:2.2rem;font-weight:800;letter-spacing:-.02em;position:relative;z-index:1}
+.env-lbl{color:var(--text-muted);font-size:.82rem;margin-top:.4rem;position:relative;z-index:1}
+/* ---- Animations ---- */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(129,140,248,.4)}100%{box-shadow:0 0 0 12px rgba(129,140,248,0)}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes alarmFlash{0%,100%{border-color:var(--glass-border)}50%{border-color:var(--danger);box-shadow:0 0 24px rgba(239,68,68,.25)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.fade-up{animation:fadeUp .5s cubic-bezier(.4,0,.2,1) both}
+.fade-up-1{animation-delay:.05s}
+.fade-up-2{animation-delay:.1s}
+.fade-up-3{animation-delay:.15s}
+.fade-up-4{animation-delay:.2s}
+.alarm-flash{animation:alarmFlash 1.2s infinite}
+.alive-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent-3);animation:pulse-ring 2s infinite;margin-right:6px}
+/* ---- Gradient Text ---- */
+.gradient-text{
+  background:linear-gradient(135deg,var(--accent-1),var(--accent-2),var(--accent-5));
+  background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:gradientShift 4s ease infinite;
+}
+/* ---- Login ---- */
+.login-page{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+}
+.login-page::before{
+  content:'';position:absolute;width:600px;height:600px;border-radius:50%;
+  background:radial-gradient(circle,rgba(129,140,248,.12),transparent 70%);
+  top:-200px;left:-100px;animation:float 8s ease-in-out infinite;
+}
+.login-page::after{
+  content:'';position:absolute;width:500px;height:500px;border-radius:50%;
+  background:radial-gradient(circle,rgba(34,211,238,.1),transparent 70%);
+  bottom:-150px;right:-100px;animation:float 10s ease-in-out infinite reverse;
+}
+.login-card{
+  width:440px;padding:2.8rem;border-radius:var(--radius-lg);
+  background:var(--glass-bg);backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow-md),0 0 80px rgba(129,140,248,.06);
+  position:relative;z-index:1;
+}
+/* ---- Insight Cards ---- */
+.insight-card{
+  border-radius:var(--radius-md);padding:1.2rem 1.5rem;margin-bottom:.8rem;
+  border:1px solid;backdrop-filter:blur(8px);transition:all .3s;
+}
+.insight-card:hover{transform:translateX(4px)}
+.insight-danger{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)}
+.insight-warning{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2)}
+.insight-info{background:rgba(6,182,212,.08);border-color:rgba(6,182,212,.2)}
+.insight-good{background:rgba(34,211,153,.08);border-color:rgba(34,211,153,.2)}
+/* ---- Header ---- */
+.el-header{
+  padding:1rem 1.8rem;background:var(--glass-bg);backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--glass-border);
+  display:flex;align-items:center;justify-content:space-between;z-index:5;
+}
+.el-main{background:transparent;padding:1.8rem}
+.el-breadcrumb__item span{color:var(--text-muted)!important;font-size:13px}
+.el-breadcrumb__item:last-child span{color:var(--text-primary)!important}
+/* ---- Element Plus Overrides ---- */
+.el-button--primary{--el-button-bg-color:var(--accent-1);--el-button-border-color:transparent;--el-button-hover-bg-color:#9ca3f8;--el-button-hover-border-color:transparent;font-weight:600;letter-spacing:.01em}
+.el-button{transition:all .25s cubic-bezier(.4,0,.2,1)}
+.el-button:hover{transform:translateY(-1px)}
+.el-dialog{
+  background:var(--glass-bg)!important;backdrop-filter:blur(32px)!important;-webkit-backdrop-filter:blur(32px)!important;
+  border:1px solid var(--glass-border)!important;border-radius:var(--radius-lg)!important;box-shadow:var(--shadow-md)!important;
+}
+.el-dialog__header{color:var(--text-primary)!important;border-bottom:1px solid var(--glass-border);padding-bottom:.8rem}
+.el-input__wrapper{background:rgba(255,255,255,.04)!important;border:1px solid var(--glass-border)!important;box-shadow:none!important;border-radius:var(--radius-sm)!important;transition:all .3s!important}
+.el-input__wrapper:hover{border-color:rgba(129,140,248,.3)!important}
+.el-input__wrapper.is-focus{border-color:var(--accent-1)!important;box-shadow:0 0 0 3px rgba(129,140,248,.15)!important}
+.el-input__inner{color:var(--text-primary)!important}
+.el-input__inner::placeholder{color:var(--text-muted)!important}
+.el-table{
+  --el-table-bg-color:transparent;--el-table-tr-bg-color:transparent;
+  --el-table-header-bg-color:rgba(15,15,26,.6);--el-table-border-color:var(--glass-border);
+  --el-table-text-color:var(--text-primary);--el-table-header-text-color:var(--text-muted);
+  --el-table-row-hover-bg-color:rgba(129,140,248,.04);
+}
+.el-table th.el-table__cell{font-weight:500;font-size:.82rem;letter-spacing:.02em;text-transform:uppercase;border-bottom:1px solid var(--glass-border)}
+.el-table td.el-table__cell{border-bottom:1px solid rgba(255,255,255,.03);font-size:.9rem}
+.el-table::before{display:none}
+.el-tag{border-radius:20px!important;font-weight:500!important;letter-spacing:.01em}
+.el-tabs__header{background:transparent!important;border-bottom:1px solid var(--glass-border)!important}
+.el-tabs__item{color:var(--text-secondary)!important;font-weight:500!important;font-size:.9rem!important}
+.el-tabs__item.is-active{color:var(--accent-1)!important}
+.el-tabs__active-bar{background:var(--accent-1)!important;height:2px!important;border-radius:2px!important}
+.el-message-box{background:var(--glass-bg)!important;backdrop-filter:blur(32px)!important;border:1px solid var(--glass-border)!important;border-radius:var(--radius-md)!important}
+.el-message-box__title{color:var(--text-primary)!important}
+.el-message-box__message{color:var(--text-secondary)!important}
+.el-select-dropdown{background:rgba(15,15,26,.95)!important;backdrop-filter:blur(16px)!important;border:1px solid var(--glass-border)!important;border-radius:var(--radius-sm)!important}
+.el-select-dropdown__item{color:var(--text-secondary)!important}
+.el-select-dropdown__item.is-hovering,.el-select-dropdown__item:hover{background:var(--glass-hover)!important;color:var(--text-primary)!important}
+.el-popper.is-dark{background:rgba(15,15,26,.95)!important;backdrop-filter:blur(16px)!important;border:1px solid var(--glass-border)!important}
+.el-radio-button__inner{border-radius:var(--radius-sm)!important}
+.el-empty__description p{color:var(--text-muted)!important}
+/* ---- Misc ---- */
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.15)}
+.summary-bar{border-radius:var(--radius-md);padding:1.2rem 1.5rem;font-size:1.05rem;font-weight:600;text-align:center;margin-bottom:1.5rem;backdrop-filter:blur(8px)}
+.summary-danger{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#fca5a5}
+.summary-warning{background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.25);color:#fcd34d}
+.summary-good{background:rgba(34,211,153,.12);border:1px solid rgba(34,211,153,.25);color:#86efac}
+.skeleton{background:linear-gradient(90deg,rgba(255,255,255,.03) 25%,rgba(255,255,255,.06) 50%,rgba(255,255,255,.03) 75%);background-size:200% 100%;animation:shimmer 2s infinite;border-radius:8px}
+.page-grid{display:grid;gap:1rem}.page-grid.cols-4{grid-template-columns:repeat(4,1fr)}.page-grid.cols-2{grid-template-columns:repeat(2,1fr)}.page-grid.cols-12{grid-template-columns:repeat(12,1fr)}.page-grid .s2{grid-column:span 2}.page-grid .s3{grid-column:span 3}.page-grid .s4{grid-column:span 4}.page-grid .s5{grid-column:span 5}.page-grid .s6{grid-column:span 6}.page-grid .s7{grid-column:span 7}.page-grid .s8{grid-column:span 8}
+.env-card-sm{padding:1.4rem 1rem;text-align:center}.env-card-sm .env-val{font-size:1.8rem}
+.voice-btn{position:fixed;bottom:24px;right:24px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--accent-1),var(--accent-2));border:2px solid rgba(255,255,255,.15);color:#fff;cursor:pointer;z-index:1000;box-shadow:0 6px 30px rgba(129,140,248,.45),inset 0 1px 0 rgba(255,255,255,.1);transition:all .35s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;overflow:hidden}.voice-btn::before{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent);opacity:0;transition:opacity .35s}.voice-btn:hover{transform:scale(1.1);box-shadow:0 8px 40px rgba(129,140,248,.6),inset 0 1px 0 rgba(255,255,255,.15)}.voice-btn:hover::before{opacity:1}.voice-btn:active{transform:scale(.94)}.voice-btn svg{width:26px;height:26px;position:relative;z-index:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2));transition:transform .3s}.voice-btn.listening{animation:voicePulse 1s infinite;background:linear-gradient(135deg,#ef4444,#f97316);border-color:rgba(255,255,255,.2)}.voice-btn.listening svg{animation:micShake .5s infinite}
+@keyframes voicePulse{0%,100%{box-shadow:0 6px 30px rgba(239,68,68,.5),0 0 0 0 rgba(239,68,68,.3)}50%{box-shadow:0 6px 44px rgba(239,68,68,.7),0 0 0 18px rgba(239,68,68,0)}}
+@keyframes micShake{0%,100%{transform:rotate(0deg)}25%{transform:rotate(-5deg)}75%{transform:rotate(5deg)}}
+.voice-bubble{position:fixed;bottom:100px;right:24px;width:320px;padding:1.2rem;border-radius:16px;background:rgba(22,22,40,.92);backdrop-filter:blur(30px) saturate(1.2);-webkit-backdrop-filter:blur(30px) saturate(1.2);border:1px solid rgba(255,255,255,.1);z-index:999;font-size:.88rem;box-shadow:0 16px 48px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset;transition:all .35s cubic-bezier(.4,0,.2,1)}.voice-bubble::after{content:'';position:absolute;bottom:-8px;right:24px;width:16px;height:16px;background:rgba(22,22,40,.92);border-right:1px solid rgba(255,255,255,.1);border-bottom:1px solid rgba(255,255,255,.1);transform:rotate(45deg);clip-path:polygon(100% 0,0 100%,100% 100%)}.voice-bubble .cmd-highlight{color:var(--accent-2);font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+<router-view></router-view>
+</div>
+
+<script>
+/* ======== API 工具 ======== */
+const api = {
+  get: (url) => fetch(url).then(r => r.ok ? r.json() : Promise.reject(r)),
+  post: (url, data) => fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r => r.json()),
+  put: (url, data) => fetch(url, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r => r.json()),
+  del: (url) => fetch(url, {method:'DELETE'}).then(r => r.json())
+};
+
+/* ======== 登录页 ======== */
+const LoginPage = {
+  template: `
+<div class="login-page">
+  <div class="login-card">
+    <div style="text-align:center;margin-bottom:2rem">
+      <div class="logo" style="justify-content:center;padding:0;font-size:2rem">RFID<span>智能安防管控平台</span></div>
+      <p style="color:#888;margin-top:.5rem">{{ isLogin ? '欢迎回来' : '创建新账号' }}</p>
+    </div>
+    <el-form :model="form" label-position="top" v-if="isLogin">
+      <el-form-item label="用户名"><el-input v-model="form.username" placeholder="请输入用户名" size="large" /></el-form-item>
+      <el-form-item label="密码"><el-input v-model="form.password" type="password" placeholder="请输入密码" show-password size="large" @keyup.enter="login" /></el-form-item>
+      <el-button type="primary" size="large" style="width:100%;margin-top:.5rem" @click="login" :loading="loading">登 录</el-button>
+      <div style="text-align:center;margin-top:1rem">
+        <el-link type="primary" @click="isLogin=false">没有账号？去注册</el-link>
+      </div>
+      <div style="text-align:center;color:#666;font-size:.75rem;margin-top:1rem">管理员: admin / admin123<br>用户: user / user123</div>
+    </el-form>
+    <el-form :model="form" label-position="top" v-else>
+      <el-form-item label="用户名"><el-input v-model="form.username" placeholder="至少3位" size="large" /></el-form-item>
+      <el-form-item label="密码"><el-input v-model="form.password" type="password" placeholder="至少6位" show-password size="large" /></el-form-item>
+      <el-form-item label="确认密码"><el-input v-model="form.password2" type="password" placeholder="再次输入密码" show-password size="large" /></el-form-item>
+      <el-button type="primary" size="large" style="width:100%;margin-top:.5rem" @click="register" :loading="loading">注 册</el-button>
+      <div style="text-align:center;margin-top:1rem">
+        <el-link type="primary" @click="isLogin=true">已有账号？去登录</el-link>
+      </div>
+    </el-form>
+  </div>
+</div>`,
+  data(){return{isLogin:true,loading:false,form:{username:'',password:'',password2:''}}},
+  methods:{
+    async login(){
+      if(!this.form.username||!this.form.password) return ElementPlus.ElMessage.warning('请填写用户名和密码');
+      this.loading=true;
+      try{
+        const r=await api.post('/api/login',{username:this.form.username,password:this.form.password});
+        if(r.ok){localStorage.setItem('role',r.role);localStorage.setItem('username',r.username);this.$router.push('/dashboard')}else{ElementPlus.ElMessage.error(r.error)}
+      }catch(e){ElementPlus.ElMessage.error('登录失败')}
+      this.loading=false;
+    },
+    async register(){
+      if(!this.form.username||!this.form.password) return ElementPlus.ElMessage.warning('请填写完整');
+      if(this.form.password!==this.form.password2) return ElementPlus.ElMessage.warning('两次密码不一致');
+      this.loading=true;
+      try{
+        const r=await api.post('/api/register',{username:this.form.username,password:this.form.password});
+        if(r.ok){ElementPlus.ElMessage.success('注册成功！');this.isLogin=true}else{ElementPlus.ElMessage.error(r.error)}
+      }catch(e){ElementPlus.ElMessage.error('注册失败')}
+      this.loading=false;
+    }
+  }
+};
+
+/* ======== 主布局 ======== */
+const MainLayout = {
+  template: `
+<el-container>
+  <el-aside width="220px">
+    <div class="logo">RFID<span>安防管控</span></div>
+    <el-menu :default-active="route" router style="border:none">
+      <el-menu-item index="/dashboard"><el-icon><component is="DataAnalysis"/></el-icon><span>仪表盘</span></el-menu-item>
+      <el-menu-item index="/monitor"><el-icon><component is="Monitor"/></el-icon><span>实时监控</span></el-menu-item>
+      <el-menu-item index="/control"><el-icon><component is="Switch"/></el-icon><span>远程控制</span></el-menu-item>
+      <el-menu-item index="/analysis"><el-icon><component is="TrendCharts"/></el-icon><span>数据统计</span></el-menu-item>
+      <el-menu-item index="/analysis/smart"><el-icon><component is="Sunny"/></el-icon><span>智能分析</span></el-menu-item>
+      <el-menu-item index="/admin/users" v-if="role==='admin'"><el-icon><component is="UserFilled"/></el-icon><span>权限管理</span></el-menu-item>
+    </el-menu>
+    <div style="position:absolute;bottom:1rem;left:1.2rem">
+      <el-tag :type="role==='admin'?'':'success'" size="small">{{ role==='admin'?'管理员':'普通用户' }}</el-tag>
+      <span style="color:#888;margin-left:.5rem;font-size:.85rem">{{ username }}</span>
+    </div>
+  </el-aside>
+  <el-container>
+    <el-header>
+      <el-breadcrumb>
+        <el-breadcrumb-item>首页</el-breadcrumb-item>
+        <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
+      </el-breadcrumb>
+      <el-button text @click="logout" style="color:#888">退出登录</el-button>
+    </el-header>
+    <el-main><router-view @update-title="t=>pageTitle=t" :role="role" :username="username" /></el-main>
+  </el-container>
+</el-container>
+  <div style="position:fixed;bottom:28px;right:28px;z-index:1000;display:flex;align-items:flex-end;gap:10px"><transition name="el-fade-in"><div class="voice-bubble" v-if="showPanel" style="position:static;width:320px" @mouseenter="keepPanel" @mouseleave="startPanelTimer"><div style="font-weight:600;margin-bottom:.5rem">语音 / 文字指令</div><div style="display:flex;gap:6px;margin-bottom:.5rem"><el-input v-model="textCmd" placeholder="例如：开门、锁门、查询温度..." size="small" style="flex:1" @keyup.enter="sendText" @focus="keepPanel" @input="keepPanel"/><el-button type="primary" size="small" @click="sendText">发送</el-button></div><div style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.4rem">或点击下方麦克风按钮说话</div><div v-if="voiceText" style="background:rgba(129,140,248,.1);border-radius:8px;padding:.5rem .7rem;margin-bottom:.3rem;font-size:.85rem"> " <span class="cmd-highlight">{{voiceText}}</span>"</div><div v-if="voiceFeedback" style="font-size:.78rem;color:var(--text-muted)">{{voiceFeedback}}</div></div></transition><button class="voice-btn" :class="{listening:voiceActive}" @click="toggleVoice" :title="voiceActive?'聆听中...点击停止':'语音控制 · 点击说话'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></button></div>
+</el-container>`,
+  data(){return{pageTitle:'仪表盘',role:'',username:'',voiceActive:false,voiceText:'',voiceFeedback:'',showPanel:false,textCmd:"",_rec:null,_panelTimer:null}},
+  mounted(){
+    this.refreshUser();
+    this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理'}[this.$route.path]||'仪表盘';
+    this._initVoice();
+  },
+  watch:{'$route.path'(){this.refreshUser();this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理'}[this.$route.path]||'仪表盘'}},
+  methods:{keepPanel(){if(this._panelTimer){clearTimeout(this._panelTimer);this._panelTimer=null}},
+    startPanelTimer(){this.keepPanel();this._panelTimer=setTimeout(()=>{this.showPanel=false},8000)},
+    refreshUser(){this.role=localStorage.getItem('role')||'';this.username=localStorage.getItem('username')||''},logout(){localStorage.clear();this.$router.push('/login')},
+    _initVoice(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;const r=new SR();r.lang='zh-CN';r.interimResults=false;r.continuous=true;r.onresult=e=>{const t=e.results[e.results.length-1][0].transcript.trim();this.voiceText=t;this.voiceFeedback='分析中...';this.voiceActive=false;r.stop();fetch('/api/smart_cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}).then(res=>{if(!res.ok)throw new Error(res.status);return res.json()}).then(d=>{this.voiceFeedback=d.reply;if(d.ok&&d.action){ElementPlus.ElMessage({message:d.reply,type:'success',duration:2000})}else if(d.ok){ElementPlus.ElMessage({message:d.reply,type:'info',duration:3000})}else{ElementPlus.ElMessage({message:d.reply,type:'warning',duration:3000})}}).catch(e=>{console.error('Voice fetch error:',e);this.voiceFeedback='命令发送失败: '+e.message;ElementPlus.ElMessage.error('命令发送失败，请检查服务是否启动')});setTimeout(()=>{if(!this.voiceActive)this.voiceText=''},5000);};r.onerror=e=>{console.warn('Speech error:',e.error);this.voiceActive=false;ElementPlus.ElMessage.warning('未检测到语音，请重试');setTimeout(()=>{this.voiceText=''},3700)};r.onend=()=>{this.voiceActive=false};this._rec=r;},
+    toggleVoice(){if(!this._rec){ElementPlus.ElMessage.warning('此浏览器不支持语音识别，请使用Chrome/Edge');return}if(this.voiceActive){this._rec.stop();this.voiceActive=false;return}this.showPanel=true;this.startPanelTimer();try{this._rec.start();this.voiceActive=true;this.voiceText='';this.voiceFeedback='聆听中...';}catch(e){console.warn('Speech start error:',e);ElementPlus.ElMessage.warning('语音启动失败');this.voiceActive=false}},
+    sendText(){const t=this.textCmd.trim();if(!t)return;this.voiceText=t;this.voiceFeedback='发送中...';fetch('/api/smart_cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}).then(res=>{if(!res.ok)throw new Error(res.status);return res.json()}).then(d=>{this.voiceFeedback=d.reply;if(d.ok&&d.action){ElementPlus.ElMessage.success(d.reply)}else if(d.ok){ElementPlus.ElMessage.info(d.reply)}else{ElementPlus.ElMessage.warning(d.reply)}}).catch(e=>{this.voiceFeedback='失败: '+e.message;ElementPlus.ElMessage.error('命令发送失败')});this.textCmd='';setTimeout(()=>{if(!this.voiceActive)this.voiceText=''},5000)},
+  }
+};
+
+/* ======== 仪表盘 ======== */
+const Dashboard = {
+  template: `
+<div class="page-grid">
+  <!-- 4 统计卡片 -->
+  <div class="page-grid cols-4">
+    <div class="stat-card fade-up fade-up-1" style="text-align:center"><div style="font-size:1.8rem;margin-bottom:.2rem">📊</div><div class="stat-value" style="color:var(--accent-1)">{{stats.today_total}}</div><div class="stat-label">今日通行次数</div></div>
+    <div class="stat-card fade-up fade-up-2" style="text-align:center"><div style="font-size:1.8rem;margin-bottom:.2rem">✅</div><div class="stat-value" style="color:var(--accent-3)">{{stats.today_pass}}</div><div class="stat-label">认证通过</div></div>
+    <div class="stat-card fade-up fade-up-3" style="text-align:center"><div style="font-size:1.8rem;margin-bottom:.2rem">🚫</div><div class="stat-value" style="color:var(--danger)">{{stats.today_fail}}</div><div class="stat-label">非法尝试</div></div>
+    <div class="stat-card fade-up fade-up-4" style="text-align:center"><div style="font-size:1.8rem;margin-bottom:.2rem">📡</div><div class="stat-value" :style="{color:live.online?'var(--accent-3)':'var(--danger)'}"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle" :style="{background:live.online?'#34d399':'#ef4444'}"></span>{{live.online?'在线':'离线'}}</div><div class="stat-label">设备状态 · {{live.last_heartbeat||'--'}}</div></div>
+  </div>
+  <!-- 表格 + 操作栏 -->
+  <div class="page-grid cols-12">
+    <div class="glass-card fade-up fade-up-2 s7"><h5 style="margin:0 0 .75rem;font-weight:600">最近通行记录</h5>
+      <el-table :data="live.logs||[]" size="small" empty-text="等待数据..." max-height="340">
+        <el-table-column prop="time" label="时间" width="170"/><el-table-column prop="uid" label="UID" width="120"/>
+        <el-table-column prop="username" label="用户" width="110"/><el-table-column prop="event" label="事件" width="110">
+          <template #default="s"><el-tag :type="s.row.event==='login'?'success':s.row.event.includes('unauth')?'danger':'info'" size="small" effect="dark">{{s.row.event}}</el-tag></template>
+        </el-table-column><el-table-column prop="topic" label="Topic" min-width="140"/>
+      </el-table>
+    </div>
+    <div class="glass-card fade-up fade-up-3 s5" style="display:flex;flex-direction:column"><h5 style="margin:0 0 .75rem;font-weight:600">快速操作</h5>
+      <div style="display:flex;flex-direction:column;gap:.7rem;flex:1">
+        <el-button type="primary" size="large" @click="cmd('unlock')" style="width:100%" v-if="$attrs.role==='admin'"><el-icon style="margin-right:8px"><Unlock/></el-icon>远程开门</el-button>
+        <el-button size="large" @click="cmd('alarm_test')" style="width:100%;background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.3);color:#fbbf24"><el-icon style="margin-right:8px"><Bell/></el-icon>测试报警</el-button>
+        <div v-if="$attrs.role!=='admin'" style="color:var(--text-muted);text-align:center;font-size:.85rem;padding:1rem">🔒 普通用户无远程开门权限</div>
+        <div style="background:rgba(255,255,255,.03);border-radius:var(--radius-sm);padding:.8rem 1rem;margin-top:auto">
+          <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.2rem">📡 环境简报</div>
+          <div style="font-size:.88rem">{{live.temp!=null?live.temp.toFixed(1)+'°C':'--'}} · {{live.humidity!=null?live.humidity.toFixed(1)+'%':'--'}} · {{live.smoke||'--'}} ppm</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`,
+  props:{role:String,username:String},
+  data(){return{stats:{},live:{},timer:null}},
+  async mounted(){this.$emit('update-title','仪表盘');await this.refresh();this.timer=setInterval(this.refresh,3000)},
+  beforeUnmount(){clearInterval(this.timer)},
+  methods:{
+    async refresh(){try{const[r1,r2]=await Promise.all([api.get('/api/stats'),api.get('/api/live')]);this.stats=r1;this.live=r2}catch(e){} },
+    async cmd(c){try{const r=await api.post('/api/cmd',{cmd:c});ElMessage[r.ok?'success':'error'](r.ok?'指令已发送':r.error)}catch(e){ElementPlus.ElMessage.error('发送失败')}}
+  }
+};
+
+/* ======== 实时监控 ======== */
+const MonitorPage = {
+  template: `
+<div class="page-grid">
+  <!-- 环境卡片行1 -->
+  <div class="page-grid cols-4">
+    <div class="env-card env-card-sm fade-up fade-up-1"><div class="env-val">{{live.online?'🟢 在线':'🔴 离线'}}</div><div class="env-lbl">设备状态 · <span :style="{color:live.online?'var(--accent-3)':'var(--danger)'}">{{live.online?'正常运行':'已断开'}}</span></div></div>
+    <div class="env-card env-card-sm fade-up fade-up-2"><div class="env-val" style="color:var(--accent-4)">{{live.temp!=null?live.temp.toFixed(1)+'°C':'--'}}</div><div class="env-lbl">🌡️ 室内温度</div></div>
+    <div class="env-card env-card-sm fade-up fade-up-3"><div class="env-val" style="color:var(--accent-2)">{{live.humidity!=null?live.humidity.toFixed(1)+'%':'--'}}</div><div class="env-lbl">💧 相对湿度</div></div>
+    <div class="env-card env-card-sm fade-up fade-up-4" :class="live.smoke>3700?'alarm-flash':''"><div class="env-val" :style="{color:live.smoke>3700?'var(--danger)':'var(--text-primary)'}">{{live.smoke||'--'}}</div><div class="env-lbl">💨 烟雾浓度 · ppm</div></div>
+  </div>
+  <!-- 环境卡片行2 -->
+  <div class="page-grid cols-4">
+    <div class="env-card env-card-sm"><div class="env-val">{{live.door_open?'🔓 已开':'🔒 已锁'}}</div><div class="env-lbl">门锁状态</div></div>
+    <div class="env-card env-card-sm" :class="live.fire?'alarm-flash':''"><div class="env-val">{{live.fire?'🔥 告警':'✅ 安全'}}</div><div class="env-lbl">火焰检测</div></div>
+    <div class="env-card env-card-sm"><div class="env-val">{{live.human?'🧑 有人':'🈳 无人'}}</div><div class="env-lbl">🚶 人体红外</div></div>
+    <div class="env-card env-card-sm"><div class="env-val" style="font-family:monospace;font-size:1.2rem">{{formatTime(live.last_heartbeat)}}</div><div class="env-lbl">💓 最后心跳</div></div>
+  </div>
+  <!-- 实时事件流 -->
+  <div class="glass-card fade-up"><h5 style="margin:0 0 .75rem;font-weight:600">实时事件流</h5>
+    <div v-if="!live.logs||!live.logs.length"><el-empty description="等待数据..." :image-size="60"/></div>
+    <div v-for="l in (live.logs||[])" :key="l.time+l.event" style="padding:.55rem .85rem;border-left:2px solid var(--glass-border);font-size:.85rem;margin-bottom:.2rem;border-radius:0 8px 8px 0;transition:background .3s"
+         :style="l.event.includes('unauth')||l.event==='illegal_door'?'border-left-color:var(--danger);background:rgba(239,68,68,.06)':'background:transparent'">
+      <span style="color:var(--text-muted);font-family:monospace;font-size:.8rem">{{l.time}}</span>
+      <span style="margin:0 .5rem;color:var(--glass-border)">|</span>
+      <el-tag :type="l.event==='login'?'success':l.event.includes('unauth')?'danger':'info'" size="small" effect="dark" style="margin-right:.4rem">{{l.event}}</el-tag>
+      {{l.username||l.uid||'--'}}
+      <span style="color:var(--text-muted);float:right;font-size:.8rem">{{l.topic}}</span>
+    </div>
+  </div>
+</div>`,
+  props:{role:String,username:String},
+  data(){return{live:{},timer:null}},
+  mounted(){this.$emit('update-title','实时监控');this.refresh();this.timer=setInterval(this.refresh,2000)},
+  beforeUnmount(){clearInterval(this.timer)},
+  methods:{async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},formatTime(t){return t||'--'}}
+};
+
+/* ======== 远程控制 ======== */
+const ControlPage = {
+  template: `
+<div class="page-grid">
+  <div class="page-grid cols-2">
+    <div class="glass-card fade-up fade-up-1" style="text-align:center;padding:2.5rem">
+      <h5 style="margin:0 0 2rem;font-weight:600">门锁控制</h5>
+      <div style="font-size:5rem;margin-bottom:1.5rem;transition:transform .3s" :style="{transform:live.door_open?'rotate(90deg)':'rotate(0deg)'}">{{live.door_open?'🔓':'🔒'}}</div>
+      <p style="color:var(--text-muted);margin-bottom:2rem;font-size:1.1rem">当前: <strong :style="{color:live.door_open?'var(--accent-3)':'var(--danger)'}">{{live.door_open?'已开启':'已锁定'}}</strong></p>
+      <template v-if="$attrs.role==='admin'">
+        <el-button type="primary" size="large" circle style="width:130px;height:130px;margin:0 1.2rem" @click="cmd('unlock')"><el-icon size="38"><Unlock/></el-icon></el-button>
+        <el-button type="danger" size="large" circle style="width:130px;height:130px;margin:0 1.2rem" @click="cmd('lock')"><el-icon size="38"><Lock/></el-icon></el-button>
+      </template>
+      <el-alert v-else title="普通用户无远程开门权限" type="warning" :closable="false" style="margin-top:1rem;background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.2)"/>
+    </div>
+    <div class="glass-card fade-up fade-up-2" style="text-align:center;padding:2.5rem">
+      <h5 style="margin:0 0 2rem;font-weight:600">系统控制</h5>
+      <el-button size="large" circle style="width:130px;height:130px;margin:0 1.2rem;background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.3);color:#fbbf24" @click="cmd('alarm_test')"><el-icon size="38"><Bell/></el-icon></el-button>
+      <el-button type="primary" size="large" circle style="width:130px;height:130px;margin:0 1.2rem" @click="cmd('reboot')"><el-icon size="38"><Refresh/></el-icon></el-button>
+      <p style="color:var(--text-muted);margin-top:2rem;font-size:.95rem">测试报警 · 重启设备 · 系统维护</p>
+    </div>
+  </div>
+  <div class="glass-card fade-up fade-up-3">
+    <h5 style="margin:0 0 .75rem;font-weight:600">操作日志</h5>
+    <div style="background:rgba(0,0,0,.2);border-radius:var(--radius-sm);padding:1rem;font-family:monospace;font-size:.84rem;max-height:240px;overflow-y:auto;line-height:1.8">
+      <div v-for="(l,i) in cmdLogs" :key="i" :style="{color:l.color||'var(--text-muted)'}"><span style="opacity:.4">[{{l.time}}]</span> {{l.msg}}</div>
+      <div v-if="!cmdLogs.length" style="color:var(--text-muted);opacity:.4">系统就绪，等待操作指令...</div>
+    </div>
+  </div>
+</div>`,
+  props:{role:String,username:String},
+  data(){return{live:{},cmdLogs:[],timer:null}},
+  mounted(){this.$emit('update-title','远程控制');this.refresh();this.timer=setInterval(this.refresh,2000)},
+  beforeUnmount(){clearInterval(this.timer)},
+  methods:{
+    async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},
+    async cmd(c){
+      const names={unlock:'远程开门',lock:'远程锁门',alarm_test:'测试报警',reboot:'重启设备'};
+      this.cmdLogs.push({time:new Date().toLocaleTimeString(),msg:'▶ '+(names[c]||c),color:'var(--accent-1)'});
+      try{
+        const r=await api.post('/api/cmd',{cmd:c});
+        this.cmdLogs.push({time:new Date().toLocaleTimeString(),msg:r.ok?'✓ 成功':'✗ '+(r.error||'失败'),color:r.ok?'var(--accent-3)':'var(--danger)'});
+      }catch(e){this.cmdLogs.push({time:new Date().toLocaleTimeString(),msg:'✗ 网络错误',color:'var(--danger)'})}
+    }
+  }
+};
+
+/* ======== 数据统计 ======== */
+const AnalysisPage = {
+  template: `
+<div class="bento-grid" style="gap:1rem">
+
+  <!-- 统计卡片行 — 4 等分 -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">
+    <div class="stat-card fade-up fade-up-1" style="text-align:center"><div class="stat-value" style="color:var(--accent-1)">{{stats.total}}</div><div class="stat-label">总记录数</div></div>
+    <div class="stat-card fade-up fade-up-2" style="text-align:center"><div class="stat-value" style="color:var(--accent-3)">{{stats.today_total}}</div><div class="stat-label">今日通行</div></div>
+    <div class="stat-card fade-up fade-up-3" style="text-align:center"><div class="stat-value" style="color:var(--danger)">{{stats.total_alarm}}</div><div class="stat-label">报警次数</div></div>
+    <div class="stat-card fade-up fade-up-4" style="text-align:center"><div class="stat-value" style="color:var(--accent-4)">{{stats.users?stats.users.length:0}}</div><div class="stat-label">活跃用户</div></div>
+  </div>
+
+  <!-- Bento 布局区 — 上半: 7日趋势(占8) + 事件饼图(占4) -->
+  <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1rem">
+    <div class="glass-card fade-up fade-up-1" style="grid-column:span 8"><h5 style="margin:0 0 .5rem;font-weight:600">📅 最近 7 天通行趋势</h5><div ref="chartDaily" style="height:300px"></div></div>
+    <div class="glass-card fade-up fade-up-2" style="grid-column:span 4"><h5 style="margin:0 0 .5rem;font-weight:600">📊 事件类型分布</h5><div ref="chartPie" style="height:300px"></div></div>
+  </div>
+
+  <!-- Bento 下半 — 用户排行(占5) + 日志查询(占7) -->
+  <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1rem">
+    <div class="glass-card fade-up fade-up-3" style="grid-column:span 5"><h5 style="margin:0 0 .5rem;font-weight:600">👤 通行用户 Top 10</h5><div ref="chartUsers" style="height:260px"></div></div>
+    <div class="glass-card fade-up fade-up-4" style="grid-column:span 7"><h5 style="margin:0 0 .75rem;font-weight:600">🔍 日志查询</h5>
+      <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+        <el-input v-model="qEvent" placeholder="事件类型" size="small" style="flex:1" />
+        <el-input v-model="qUser" placeholder="用户名" size="small" style="flex:1" />
+        <el-button type="primary" size="small" @click="searchLogs" style="white-space:nowrap">🔍 搜索</el-button>
+      </div>
+      <div style="max-height:220px;overflow-y:auto">
+        <div v-for="l in searchResults" :key="l.id" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;transition:background .2s"
+             @mouseenter="$event.target.style.background='var(--glass-hover)'" @mouseleave="$event.target.style.background='transparent'">
+          <span style="color:var(--text-muted);font-family:monospace;white-space:nowrap;min-width:140px">{{ l.access_time }}</span>
+          <el-tag :type="l.event==='login'?'success':l.event.includes('unauth')?'danger':'info'" size="small" effect="dark">{{ l.event }}</el-tag>
+          <span style="flex:1">{{ l.username||l.uid||'--' }}</span>
+        </div>
+        <div v-if="!searchResults||!searchResults.length" style="text-align:center;color:var(--text-muted);padding:2rem">
+          <el-icon size="32" style="margin-bottom:.5rem"><Search/></el-icon>
+          <p style="font-size:.85rem">输入条件后点击搜索</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>`,
+  props:{role:String,username:String},
+  data(){return{stats:{},searchResults:[],qEvent:'',qUser:''}},
+  mounted(){this.$emit('update-title','数据统计');this.load()},
+  methods:{
+    async load(){this.stats=await api.get('/api/stats');this.$nextTick(()=>{this.initCharts()})},
+    initCharts(){
+      const s=this.stats;
+      if(!s||!s.daily) return;
+      if(this.c1) this.c1.dispose();if(this.c2) this.c2.dispose();if(this.c3) this.c3.dispose();
+      this.c1=echarts.init(this.$refs.chartDaily);this.c2=echarts.init(this.$refs.chartPie);this.c3=echarts.init(this.$refs.chartUsers);
+      this.c1.setOption({
+        tooltip:{trigger:'axis'},grid:{top:10,right:10,bottom:20,left:40},
+        xAxis:{type:'category',data:s.daily.map(d=>d.date),axisLabel:{color:'#888'},axisLine:{lineStyle:{color:'var(--glass-border)'}}},
+        yAxis:{type:'value',axisLabel:{color:'#888'},splitLine:{lineStyle:{color:'var(--glass-border)'}}},
+        series:[{data:s.daily.map(d=>d.count),type:'line',smooth:true,lineStyle:{color:'#818cf8',width:2.5},itemStyle:{color:'#818cf8'},symbolSize:6,
+          areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(129,140,248,.25)'},{offset:1,color:'rgba(129,140,248,0)'}])}}]
+      });
+      this.c2.setOption({
+        tooltip:{trigger:'item'},legend:{bottom:0,textStyle:{color:'#94a3b8'}},
+        series:[{type:'pie',radius:['42%','72%'],center:['50%','45%'],label:{color:'#94a3b8'},labelLine:{lineStyle:{color:'var(--glass-border)'}},data:(s.events||[]).map(e=>({name:e.event,value:e.count}))}],
+        color:['#6366f1','#22c55e','#ef4444','#f59e0b','#06b6d4','#ec4899']
+      });
+      this.c3.setOption({
+        tooltip:{trigger:'axis'},grid:{top:0,right:10,bottom:0,left:80},
+        xAxis:{type:'value',axisLabel:{color:'#94a3b8'},splitLine:{lineStyle:{color:'var(--glass-border)'}}},
+        yAxis:{type:'category',data:(s.users||[]).map(u=>u.name),axisLabel:{color:'#94a3b8'},axisLine:{lineStyle:{color:'var(--glass-border)'}}},
+        series:[{data:(s.users||[]).map(u=>u.count),type:'bar',itemStyle:{color:'#818cf8',borderRadius:[0,8,8,0]},barWidth:18}]
+      });
+      window.addEventListener('resize',()=>{this.c1&&this.c1.resize();this.c2&&this.c2.resize();this.c3&&this.c3.resize()},{once:true});
+    },
+    async searchLogs(){
+      const params=new URLSearchParams({event:this.qEvent,username:this.qUser,per_page:30});
+      const r=await api.get('/api/logs?'+params);
+      this.searchResults=r.logs||[];
+    }
+  }
+};
+
+/* ======== 智能分析 ======== */
+const SmartAnalysis = {
+  template: `
+<div class="page-grid">
+  <div class="page-grid cols-4">
+    <div class="env-card env-card-sm"><div class="env-val">{{d.temperature!=null?d.temperature.toFixed(1)+'°C':'--°C'}}</div><div class="env-lbl">🌡️ 室内温度</div></div>
+    <div class="env-card env-card-sm"><div class="env-val">{{d.humidity!=null?d.humidity.toFixed(1)+'%':'--%'}}</div><div class="env-lbl">💧 相对湿度</div></div>
+    <div class="env-card env-card-sm"><div class="env-val">{{d.smoke!=null?d.smoke:'--'}}</div><div class="env-lbl">💨 烟雾浓度</div></div>
+    <div class="env-card env-card-sm" :class="d.fire?'alarm-flash':''"><div class="env-val">{{d.fire?'🔴 有火':'🟢 安全'}}</div><div class="env-lbl">🔥 火焰状态</div></div>
+  </div>
+  <div style="text-align:center;color:var(--text-muted);font-size:.75rem">📋 分析依据: GB/T 18883-2022 | GB 50736-2012 | GB 50325-2020</div>
+  <div :class="summaryClass" class="summary-bar" v-if="d.summary">{{d.summary}}</div>
+  <div v-if="!d.insights||!d.insights.length" style="text-align:center;padding:3rem"><el-empty description="暂无传感器数据"/></div>
+  <div v-for="ins in (d.insights||[])" :key="ins.title" :class="'insight-card insight-'+ins.level">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:.4rem">{{{'danger':'🔴','warning':'🟡','info':'🔵','good':'🟢'}[ins.level]}} {{ins.title}}</div>
+    <div style="font-size:.9rem;line-height:1.8;color:#ccc;margin-bottom:.6rem">{{ins.detail}}</div>
+    <div style="background:rgba(0,0,0,.3);border-radius:8px;padding:.55rem .9rem;font-size:.88rem">💡 <strong>建议:</strong> {{ins.suggestion}}</div>
+    <div style="font-size:.75rem;color:#666;margin-top:.4rem">📖 {{ins.reference}}</div>
+  </div>
+</div>`,
+  props:{role:String,username:String},
+  data(){return{d:{},timer:null}},
+  mounted(){this.$emit('update-title','智能分析');this.refresh();this.timer=setInterval(this.refresh,5000)},
+  beforeUnmount(){clearInterval(this.timer)},
+  methods:{async refresh(){try{this.d=await api.get('/api/smart_analysis')}catch(e){}}},
+  computed:{
+    summaryClass(){
+      if(this.d.fire||(this.d.insights||[]).some(i=>i.level==='danger')) return 'summary-danger';
+      if((this.d.insights||[]).some(i=>i.level==='warning')) return 'summary-warning';
+      return 'summary-good';
+    }
+  }
+};
+
+/* ======== 权限管理 ======== */
+const AdminUsers = {
+  template: `
+<div class="page-grid">
+  <div class="page-grid cols-4">
+    <div class="stat-card" style="text-align:center;cursor:pointer" @click="activeTab='users'" :style="activeTab==='users'?'border-color:var(--accent-1);box-shadow:0 0 20px rgba(129,140,248,.15)':''"><div class="stat-value" style="color:var(--accent-1)">{{users.length}}</div><div class="stat-label">系统用户</div></div>
+    <div class="stat-card" style="text-align:center"><div class="stat-value" style="color:var(--accent-4)">{{users.filter(u=>u.role==='admin').length}}</div><div class="stat-label">管理员</div></div>
+    <div class="stat-card" style="text-align:center"><div class="stat-value" style="color:var(--accent-3)">{{users.filter(u=>u.role==='user').length}}</div><div class="stat-label">普通用户</div></div>
+    <div class="stat-card" style="text-align:center;cursor:pointer" @click="activeTab='cards'" :style="activeTab==='cards'?'border-color:var(--accent-1);box-shadow:0 0 20px rgba(129,140,248,.15)':''"><div class="stat-value" style="color:var(--accent-2)">{{cards.length}}</div><div class="stat-label">RFID 授权卡</div></div>
+  </div>
+  <div class="page-grid cols-12">
+    <div class="glass-card s7"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><h5 style="margin:0"><el-icon style="margin-right:4px"><UserFilled/></el-icon>系统用户管理</h5><el-button type="primary" size="small" :icon="Plus" @click="showAddUser=true">添加用户</el-button></div>
+      <el-table :data="users" size="small" empty-text="暂无用户" max-height="360" :header-cell-style="{background:'transparent',color:'var(--text-muted)',fontWeight:'normal'}">
+        <el-table-column label="用户" min-width="160"><template #default="s"><div style="display:flex;align-items:center;gap:.6rem"><el-avatar :size="30" :style="{background:s.row.role==='admin'?'var(--accent-1)':'var(--accent-3)'}">{{s.row.username.charAt(0).toUpperCase()}}</el-avatar><div><div style="font-weight:600;font-size:.88rem">{{s.row.username}}</div><div style="color:var(--text-muted);font-size:.72rem">ID: {{s.row.id}}</div></div></div></template></el-table-column>
+        <el-table-column label="角色" width="110"><template #default="s"><el-tag :type="s.row.role==='admin'?'':'success'" effect="dark" size="small" style="border-radius:20px">{{s.row.role==='admin'?'管理员':'普通用户'}}</el-tag></template></el-table-column>
+        <el-table-column prop="created" label="创建时间" width="160"><template #default="s"><span style="color:var(--text-muted);font-size:.82rem">{{s.row.created}}</span></template></el-table-column>
+        <el-table-column label="操作" width="140" fixed="right"><template #default="s"><el-tooltip :content="s.row.role==='admin'?'降为普通用户':'升为管理员'" placement="top"><el-button size="small" text @click="changeRole(s.row)"><el-icon><component :is="s.row.role==='admin'?'Bottom':'Top'"/></el-icon></el-button></el-tooltip><el-tooltip content="删除用户" placement="top"><el-button size="small" text type="danger" @click="delUser(s.row)"><el-icon><Delete/></el-icon></el-button></el-tooltip></template></el-table-column>
+      </el-table>
+    </div>
+    <div class="glass-card s5"><h5 style="margin:0 0 .75rem"><el-icon style="margin-right:4px"><CreditCard/></el-icon>RFID 授权卡</h5>
+      <div style="display:flex;gap:.4rem;margin-bottom:.75rem"><el-input v-model="cardForm.uid" placeholder="卡号 UID" size="small" style="flex:1" @keyup.enter="addCard"><template #prefix><el-icon><Key/></el-icon></template></el-input><el-input v-model="cardForm.username" placeholder="持卡人" size="small" style="flex:1" @keyup.enter="addCard"><template #prefix><el-icon><User/></el-icon></template></el-input><el-button type="primary" size="small" @click="addCard">添加</el-button></div>
+      <div style="max-height:340px;overflow-y:auto">
+        <div v-for="c in cards" :key="c.uid" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;margin-bottom:.3rem;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid var(--glass-border);transition:all .2s" @mouseenter="$event.target.style.borderColor='var(--accent-1)'" @mouseleave="$event.target.style.borderColor='var(--glass-border)'">
+          <div style="display:flex;align-items:center;gap:.6rem"><div style="width:34px;height:34px;border-radius:8px;background:rgba(129,140,248,.12);display:flex;align-items:center;justify-content:center">💳</div><div><div style="font-weight:600;font-family:monospace;font-size:.85rem">{{c.uid}}</div><div style="color:var(--text-muted);font-size:.78rem">{{c.username}}</div></div></div>
+          <el-button size="small" type="danger" text circle :icon="Delete" @click="delCard(c)"></el-button>
+        </div>
+        <div v-if="!cards||!cards.length" style="text-align:center;color:var(--text-muted);padding:2.5rem"><el-icon size="36"><CreditCard/></el-icon><p style="margin-top:.5rem;font-size:.85rem">暂无授权卡</p></div>
+      </div>
+    </div>
+  </div>
+  <el-dialog v-model="showAddUser" title="添加新用户" width="440px" :close-on-click-modal="false">
+    <el-form :model="addForm" label-position="top" style="padding:0 1rem">
+      <el-form-item label="用户名"><el-input v-model="addForm.username" placeholder="至少3位字符" size="large"/></el-form-item>
+      <el-form-item label="密码"><el-input v-model="addForm.password" type="password" placeholder="至少6位字符" size="large" show-password/></el-form-item>
+      <el-form-item label="角色权限"><el-radio-group v-model="addForm.role" size="large"><el-radio-button value="admin">👑 管理员 — 全部权限</el-radio-button><el-radio-button value="user">👤 普通用户 — 查看权限</el-radio-button></el-radio-group></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="showAddUser=false" size="large">取消</el-button><el-button type="primary" @click="addUser" size="large">确认添加</el-button></template>
+  </el-dialog>
+</div>`,
+  props:{role:String,username:String},
+  data(){return{activeTab:'users',showAddUser:false,addForm:{username:'',password:'',role:'user'},users:[],cards:[],cardForm:{uid:'',username:''},currentUserId:null}},
+  mounted(){this.$emit('update-title','权限管理');this.load()},
+  methods:{
+    async load(){const[u,c]=await Promise.all([api.get('/api/admin/users'),api.get('/api/admin/cards')]);this.users=u;this.cards=c},
+    async addUser(){const r=await api.post('/api/admin/user',this.addForm);if(r.ok){this.users.push({id:Date.now(),username:this.addForm.username,role:this.addForm.role,created:new Date().toLocaleString()});this.showAddUser=false;ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
+    async delUser(u){try{await ElMessageBox.confirm('确定删除用户 '+u.username+'?','确认',{type:'warning'});const r=await api.del('/api/admin/user/'+u.id);if(r.ok){const i=this.users.findIndex(x=>x.id===u.id);if(i>=0)this.users.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}},
+    async changeRole(u){const newRole=u.role==='admin'?'user':'admin';const r=await api.put('/api/admin/user/'+u.id+'/role',{role:newRole});if(r.ok){u.role=newRole;if(u.username===localStorage.getItem('username')){localStorage.setItem('role',newRole)};ElementPlus.ElMessage.success('已更新')}else{ElementPlus.ElMessage.error(r.error||'操作失败')}},
+    async addCard(){const r=await api.post('/api/admin/card',this.cardForm);if(r.ok){this.cards.push({uid:this.cardForm.uid.toUpperCase(),username:this.cardForm.username,role:'user'});this.cardForm={uid:'',username:''};ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
+    async delCard(c){try{await ElMessageBox.confirm('确定删除卡 '+c.uid+'?','确认',{type:'warning'});const r=await api.del('/api/admin/card/'+c.uid);if(r.ok){const i=this.cards.findIndex(x=>x.uid===c.uid);if(i>=0)this.cards.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}}
+  }
+};
+
+/* ======== 路由 & 启动 ======== */
+const routes=[
+  {path:'/',redirect:'/login'},
+  {path:'/login',component:LoginPage},
+  {path:'/',component:MainLayout,children:[
+    {path:'/dashboard',component:Dashboard},
+    {path:'/monitor',component:MonitorPage},
+    {path:'/control',component:ControlPage},
+    {path:'/analysis',component:AnalysisPage},
+    {path:'/analysis/smart',component:SmartAnalysis},
+    {path:'/admin/users',component:AdminUsers},
+  ]}
+];
+
+const router=VueRouter.createRouter({history:VueRouter.createWebHashHistory(),routes});
+
+router.beforeEach(async (to,from)=>{
+  if(to.path==='/login') return true;
+  if(!localStorage.getItem('role')) return '/login';
+  return true;
+});
+
+const app=Vue.createApp({});
+app.use(router);
+app.use(ElementPlus);
+if(window.ElementPlusIconsVue){for(const[name,comp]of Object.entries(ElementPlusIconsVue)){app.component(name,comp)}}
+app.mount('#app');
+</script>
+</body>
+</html>

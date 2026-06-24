@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFID智能门禁 - 登录</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root { --bg: #121212; --card: #1e1e2f; --accent: #6366f1; --text: #e0e0e0; }
+        body { background: var(--bg); min-height: 100vh; display: flex; align-items: center; }
+        .card { background: var(--card); border: 1px solid #2a2a3d; border-radius: 16px; }
+        .btn-primary { background: var(--accent); border: none; }
+        .text-muted { color: #888 !important; }
+        input { background: #2a2a3d !important; border: 1px solid #3a3a4d !important; color: #fff !important; }
+        input:focus { border-color: var(--accent) !important; box-shadow: none !important; }
+        .brand { font-size: 2rem; font-weight: 700; color: #fff; }
+        .brand span { color: var(--accent); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-4">
+            <div class="card p-4">
+                <div class="text-center mb-4">
+                    <div class="brand">RFID<span>门禁</span></div>
+                    <small class="text-muted">智能门禁管理系统</small>
+                </div>
+
+                <!-- 登录表单 -->
+                <div id="loginForm">
+                    <h5 class="text-white mb-3">登录</h5>
+                    <div class="mb-3">
+                        <input id="loginUser" class="form-control" placeholder="用户名">
+                    </div>
+                    <div class="mb-3">
+                        <input id="loginPw" class="form-control" type="password" placeholder="密码">
+                    </div>
+                    <button class="btn btn-primary w-100 mb-2" onclick="doLogin()">登录</button>
+                    <small class="text-muted">
+                        没有账号？<a href="#" onclick="switchForm()" class="text-decoration-none">去注册</a>
+                    </small>
+                    <div class="mt-2 text-muted" style="font-size: 0.75rem;">
+                        管理员: admin / admin123<br>用户: user / user123
+                    </div>
+                </div>
+
+                <!-- 注册表单 -->
+                <div id="registerForm" style="display:none;">
+                    <h5 class="text-white mb-3">注册</h5>
+                    <div class="mb-3">
+                        <input id="regUser" class="form-control" placeholder="用户名 (3位以上)">
+                    </div>
+                    <div class="mb-3">
+                        <input id="regPw" class="form-control" type="password" placeholder="密码 (6位以上)">
+                    </div>
+                    <div class="mb-3">
+                        <input id="regPw2" class="form-control" type="password" placeholder="确认密码">
+                    </div>
+                    <button class="btn btn-primary w-100 mb-2" onclick="doRegister()">注册</button>
+                    <small class="text-muted">
+                        已有账号？<a href="#" onclick="switchForm()" class="text-decoration-none">去登录</a>
+                    </small>
+                </div>
+
+                <div id="msg" class="mt-2 text-center" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchForm() {
+    const l = document.getElementById('loginForm');
+    const r = document.getElementById('registerForm');
+    if (l.style.display === 'none') { l.style.display = 'block'; r.style.display = 'none'; }
+    else { l.style.display = 'none'; r.style.display = 'block'; }
+    document.getElementById('msg').style.display = 'none';
+}
+
+function showMsg(ok, msg) {
+    const el = document.getElementById('msg');
+    el.className = 'mt-2 text-center alert ' + (ok ? 'alert-success' : 'alert-danger');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+async function doLogin() {
+    const u = document.getElementById('loginUser').value;
+    const p = document.getElementById('loginPw').value;
+    if (!u || !p) return showMsg(false, '请输入用户名和密码');
+    const r = await fetch('/api/login', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p})});
+    const d = await r.json();
+    if (d.ok) { window.location.href = '/dashboard'; }
+    else { showMsg(false, d.error); }
+}
+
+async function doRegister() {
+    const u = document.getElementById('regUser').value.trim();
+    const p = document.getElementById('regPw').value.trim();
+    const p2 = document.getElementById('regPw2').value.trim();
+    if (!u || !p) return showMsg(false, '用户名和密码不能为空');
+    if (p !== p2) return showMsg(false, '两次密码不一致');
+    const r = await fetch('/api/register', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p})});
+    const d = await r.json();
+    if (d.ok) { showMsg(true, '注册成功! 请登录'); switchForm(); }
+    else { showMsg(false, d.error); }
+}
+
+document.getElementById('loginPw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>

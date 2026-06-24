@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>智能环境分析 | RFID 门禁</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root { --bg: #121212; --card: #1e1e2f; --accent: #6366f1; --nav: #151521; }
+        body { background: var(--bg); color: #e0e0e0; }
+        .sidebar { background: var(--nav); min-height: 100vh; position: fixed; width: 240px; padding-top: 1.5rem; }
+        .sidebar a { color: #aaa; display: block; padding: 0.7rem 1.5rem; text-decoration: none; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { color: #fff; background: rgba(99,102,241,.15); border-left-color: var(--accent); }
+        .main { margin-left: 240px; padding: 1.5rem; }
+        .insight-card { border-radius: 16px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid; }
+        .insight-danger { background: rgba(239,68,68,.12); border-color: #ef4444; }
+        .insight-warning { background: rgba(245,158,11,.12); border-color: #f59e0b; }
+        .insight-info { background: rgba(6,182,212,.12); border-color: #06b6d4; }
+        .insight-good { background: rgba(34,197,94,.12); border-color: #22c55e; }
+        .insight-title { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; }
+        .insight-detail { font-size: .93rem; line-height: 1.8; color: #ccc; margin-bottom: .75rem; }
+        .insight-suggest { background: rgba(0,0,0,.3); border-radius: 8px; padding: .6rem 1rem; font-size: .9rem; }
+        .insight-ref { font-size: .75rem; color: #666; margin-top: .5rem; }
+        .sensor-card { text-align: center; padding: 1.5rem; border-radius: 12px; border: 1px solid #2a2a3d; background: var(--card); }
+        .sensor-card .val { font-size: 2.5rem; font-weight: 700; }
+        .sensor-card .lbl { color: #888; font-size: .85rem; }
+        .summary-bar { border-radius: 12px; padding: 1.2rem 1.5rem; font-size: 1.1rem; font-weight: 600; text-align: center; margin-bottom: 1.5rem; }
+        .summary-danger { background: rgba(239,68,68,.2); border: 1px solid #ef4444; color: #fca5a5; }
+        .summary-warning { background: rgba(245,158,11,.2); border: 1px solid #f59e0b; color: #fcd34d; }
+        .summary-good { background: rgba(34,197,94,.2); border: 1px solid #22c55e; color: #86efac; }
+        .indicator-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .25rem; }
+        .indicator-bar .bar-track { flex: 1; height: 6px; background: #2a2a3d; border-radius: 3px; overflow: hidden; }
+        .indicator-bar .bar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+        .tab-content { margin-top: 1rem; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand" style="font-size:1.4rem; padding:0 1.5rem 1rem; color:#fff;">RFID<span style="color:var(--accent);">门禁</span></div>
+    <a href="/dashboard"><i class="bi bi-speedometer2 me-2"></i>仪表盘</a>
+    <a href="/monitor"><i class="bi bi-display me-2"></i>实时监控</a>
+    <a href="/control"><i class="bi bi-toggle-on me-2"></i>远程控制</a>
+    <a href="/analysis"><i class="bi bi-bar-chart me-2"></i>数据统计</a>
+    <a href="/analysis/smart" class="active"><i class="bi bi-lightbulb me-2"></i>智能分析</a>
+    {% if role == 'admin' %}
+    <a href="/admin/users"><i class="bi bi-people me-2"></i>权限管理</a>
+    {% endif %}
+    <hr style="border-color:#2a2a3d; margin:1rem;">
+    <a href="/logout"><i class="bi bi-box-arrow-right me-2"></i>退出 ({{ username }})</a>
+    <div class="px-3 mt-2"><span class="badge" style="background:var(--accent);">{{ '管理员' if role=='admin' else '普通用户' }}</span></div>
+</div>
+
+<div class="main">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>💡 智能环境分析</h4>
+        <button class="btn btn-sm btn-outline-light" onclick="refresh()"><i class="bi bi-arrow-repeat me-1"></i>刷新分析</button>
+    </div>
+
+    <!-- 综合摘要 -->
+    <div id="summary-bar" class="summary-bar summary-good">正在分析传感器数据...</div>
+
+    <!-- 传感器数值 -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="sensor-card">
+                <div class="val" id="s-temp">--°C</div>
+                <div class="lbl">🌡️ 室内温度</div>
+                <div class="indicator-bar mt-2"><small style="color:#06b6d4;">0</small><div class="bar-track"><div class="bar-fill" id="bar-temp" style="width:0%; background: linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);"></div></div><small style="color:#ef4444;">40°C</small></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sensor-card">
+                <div class="val" id="s-hum">--%</div>
+                <div class="lbl">💧 相对湿度</div>
+                <div class="indicator-bar mt-2"><small style="color:#06b6d4;">0</small><div class="bar-track"><div class="bar-fill" id="bar-hum" style="width:0%; background: linear-gradient(90deg,#ef4444,#22c55e,#ef4444);"></div></div><small style="color:#ef4444;">100%</small></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sensor-card">
+                <div class="val" id="s-smoke">--</div>
+                <div class="lbl">💨 烟雾浓度</div>
+                <div class="indicator-bar mt-2"><small style="color:#06b6d4;">0</small><div class="bar-track"><div class="bar-fill" id="bar-smoke" style="width:0%; background: linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);"></div></div><small style="color:#ef4444;">4095</small></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sensor-card">
+                <div class="val" id="s-fire">🟢</div>
+                <div class="lbl">🔥 火焰状态</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 标准参考 -->
+    <div class="mb-3" style="font-size:.8rem;color:#666;">
+        📋 分析依据: GB/T 18883-2022《室内空气质量标准》 | GB 50736-2012《民用建筑供暖通风与空气调节设计规范》 | GB 50325-2020《民用建筑工程室内环境污染控制规范》
+    </div>
+
+    <!-- 智能分析结论 -->
+    <div id="insights-container">
+        <div class="text-muted text-center py-5">等待传感器数据...</div>
+    </div>
+</div>
+
+<script>
+function buildBar(elId, value, max) {
+    const bar = document.getElementById(elId);
+    if (!bar) return;
+    const pct = Math.min(100, Math.max(0, (value / max) * 100));
+    bar.style.width = pct + '%';
+}
+
+async function refresh() {
+    try {
+        const r = await fetch('/api/smart_analysis');
+        const d = await r.json();
+
+        // 传感器数值
+        document.getElementById('s-temp').textContent = d.temperature != null ? d.temperature.toFixed(1) + '°C' : '--°C';
+        document.getElementById('s-hum').textContent = d.humidity != null ? d.humidity.toFixed(1) + '%' : '--%';
+        document.getElementById('s-smoke').textContent = d.smoke != null ? d.smoke : '--';
+        document.getElementById('s-fire').textContent = d.fire ? '🔴 有火!' : '🟢 安全';
+
+        // 进度条
+        if (d.temperature != null) buildBar('bar-temp', d.temperature, 40);
+        if (d.humidity != null) buildBar('bar-hum', d.humidity, 100);
+        if (d.smoke != null) buildBar('bar-smoke', d.smoke, 4095);
+
+        // 摘要
+        const sbar = document.getElementById('summary-bar');
+        if (d.fire) {
+            sbar.className = 'summary-bar summary-danger';
+            sbar.textContent = '🚨 ' + d.summary;
+        } else if (!d.insights || d.insights.length === 0) {
+            sbar.className = 'summary-bar summary-good';
+            sbar.textContent = '暂无传感器数据，无法生成分析';
+        } else {
+            const hasDanger = d.insights.some(i => i.level === 'danger');
+            const hasWarning = d.insights.some(i => i.level === 'warning');
+            if (hasDanger) { sbar.className = 'summary-bar summary-danger'; }
+            else if (hasWarning) { sbar.className = 'summary-bar summary-warning'; }
+            else { sbar.className = 'summary-bar summary-good'; }
+            sbar.textContent = '📋 ' + d.summary;
+        }
+
+        // 分析条目
+        const container = document.getElementById('insights-container');
+        if (!d.insights || d.insights.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center py-5">暂无传感器数据，请检查 ESP32 是否在线并已连接传感器</div>';
+            return;
+        }
+
+        container.innerHTML = d.insights.map(ins => {
+            const levelIcon = { danger:'🔴', warning:'🟡', info:'🔵', good:'🟢' };
+            const cls = 'insight-card insight-' + ins.level;
+            return `<div class="${cls}">
+                <div class="insight-title">${levelIcon[ins.level]||''} ${ins.title}</div>
+                <div class="insight-detail">${ins.detail}</div>
+                <div class="insight-suggest">💡 <strong>建议:</strong> ${ins.suggestion}</div>
+                <div class="insight-ref">📖 ${ins.reference}</div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        document.getElementById('summary-bar').textContent = '⚠️ 无法获取分析数据';
+        document.getElementById('insights-container').innerHTML = '<div class="text-muted text-center py-5">网络错误，请重试</div>';
+    }
+}
+
+// 初始加载
+refresh();
+// 每 5 秒刷新
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
