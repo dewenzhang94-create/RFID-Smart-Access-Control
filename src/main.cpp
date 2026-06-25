@@ -63,6 +63,10 @@ void setup() {
     Serial.println(F("  ESP32 + MFRC522 + MQTT + Servo + Env"));
     Serial.println(F("========================================\n"));
 
+    // 0. 强制静音 (防止上电误响, HIGH=静音)
+    pinMode(25, OUTPUT);
+    digitalWrite(25, HIGH);
+
     // 1. OLED 显示初始化
     oledInit();
     showMessage("System Booting...");
@@ -88,14 +92,15 @@ void setup() {
     // 7. WiFi 连接 + NTP 时间同步
     connectWifi();
 
-    // 8. MQTT 初始化并连接 + 注册远程指令回调
+    // 8. MQTT 初始化并连接 + 注册远程指令回调 + 用户同步回调
     mqttInit();
     onRemoteCommand([](const char* cmd) {
         Serial.printf("MAIN: Remote command received: %s\n", cmd);
+
+        // --- 远程门禁控制 ---
         if (strcmp(cmd, "unlock") == 0) {
             servoUnlock();
             successBeep();
-            // 上报远程开门事件到前端
             String doorMsg = buildJson("", "REMOTE", "door_open");
             String doorEnc = encryptData(doorMsg);
             publishMessage(TOPIC_DOOR, doorEnc.c_str());
@@ -103,20 +108,58 @@ void setup() {
             stateEnterTime = millis();
         } else if (strcmp(cmd, "lock") == 0) {
             servoLock();
-            // 上报远程锁门事件
             String doorMsg = buildJson("", "REMOTE", "door_close");
             String doorEnc = encryptData(doorMsg);
             publishMessage(TOPIC_DOOR, doorEnc.c_str());
             resetToIdle();
         } else if (strcmp(cmd, "alarm_test") == 0) {
             alarm();
+
+        // --- 用户白名单同步 (服务器推送) ---
+        } else if (strncmp(cmd, "sync_user_add:", 14) == 0) {
+            // 格式: sync_user_add:FE320102:ZDW
+            char buf[64];
+            strncpy(buf, cmd, 63);
+            char* uid  = buf + 14;   // 跳过 "sync_user_add:"
+            char* name = strchr(uid, ':');
+            if (name) {
+                *name = '\0';
+                name++;
+                rfidAddUser(uid, name);
+                showMessage("User Added", uid);
+            }
+        } else if (strncmp(cmd, "sync_user_del:", 14) == 0) {
+            // 格式: sync_user_del:FE320102
+            char buf[32];
+            strncpy(buf, cmd + 14, 31);
+            rfidDelUser(buf);
+            showMessage("User Removed", buf);
+
+        // --- 完整白名单下发 (list命令) ---
+        } else if (strcmp(cmd, "sync_user_list") == 0) {
+            // 服务器通过 rfid/users topic 下发完整 JSON
+            // 这里只是通知, 实际数据由 onUsersSync 回调处理
+            showMessage("Syncing...", "User List");
         }
     });
+
+    // 注册用户同步回调: 接收服务器下发的完整白名单 JSON
+    onUsersSync([](const char* json) {
+        int count = rfidLoadFromJson(json);
+        char msg[32];
+        snprintf(msg, 32, "%d Users Loaded", count);
+        showMessage("Sync OK!", msg);
+    });
+
     mqttConnect();
 
-    // 9. 上报系统启动事件
+    // 9. 上报系统启动事件 + 请求用户白名单同步
     String msg = buildJson("", "SYSTEM", "system_start");
     publishMessage(TOPIC_SYSTEM, msg.c_str());
+
+    // 请求服务器下发完整白名单 (服务器会通过 rfid/users 回复)
+    Serial.println(F("MAIN: Requesting user sync from server..."));
+    publishMessage(TOPIC_CMD, "sync_users");
 
     // 10. 进入空闲状态
     state = STATE_IDLE;
@@ -211,9 +254,9 @@ void loop() {
 
             // 持续蜂鸣 (500ms 间隔)
             if (millis() % 1000 < 500) {
-                digitalWrite(25, HIGH);
+                digitalWrite(25, LOW);   // LOW = 响
             } else {
-                digitalWrite(25, LOW);
+                digitalWrite(25, HIGH);  // HIGH = 静音
             }
 
             // 火灭后恢复
@@ -221,7 +264,7 @@ void loop() {
                 Serial.println(F("MAIN: Fire cleared, locking..."));
                 servoLock();
                 ledRed(false);
-                digitalWrite(25, LOW);
+                digitalWrite(25, HIGH);
                 resetToIdle();
             }
             break;
@@ -231,6 +274,11 @@ void loop() {
 
     // --- 系统心跳 (含环境数据) ---
     publishSystemHeartbeat();
+
+    // 非报警状态下强制静音 (防止 GPIO 悬空误响)
+    if (state != STATE_ALARM && state != STATE_FIRE) {
+        digitalWrite(25, HIGH);  // HIGH = 静音
+    }
 
     delay(50);  // 主循环频率 ~20Hz
 }
@@ -323,7 +371,7 @@ static void handleEnvMonitor() {
         servoUnlock();
 
         // 持续报警
-        digitalWrite(25, HIGH);
+        digitalWrite(25, LOW);   // LOW = 响
         ledRed(true);
 
         // MQTT 紧急上报
@@ -415,6 +463,6 @@ static void resetToIdle() {
     showMessage("System Ready");
     ledGreen(false);
     ledRed(false);
-    digitalWrite(25, LOW);
+    digitalWrite(25, HIGH);
     Serial.println(F("MAIN: -> IDLE"));
 }

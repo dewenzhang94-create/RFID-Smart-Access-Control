@@ -19,7 +19,8 @@ void buzzerInit() {
     pinMode(GREEN_LED, OUTPUT);
     pinMode(RED_LED, OUTPUT);
 
-    digitalWrite(BUZZER_PIN, LOW);
+    // 上电默认 HIGH (有源蜂鸣器低电平触发: HIGH=静音)
+    digitalWrite(BUZZER_PIN, HIGH);
     digitalWrite(GREEN_LED, LOW);
     digitalWrite(RED_LED, LOW);
 
@@ -33,9 +34,9 @@ void buzzerInit() {
 void alarm() {
     digitalWrite(RED_LED, HIGH);
     for (int i = 0; i < 3; i++) {
-        digitalWrite(BUZZER_PIN, HIGH);
+        digitalWrite(BUZZER_PIN, LOW);   // LOW = 响
         delay(150);
-        digitalWrite(BUZZER_PIN, LOW);
+        digitalWrite(BUZZER_PIN, HIGH);  // HIGH = 静音
         delay(80);
     }
     digitalWrite(RED_LED, LOW);
@@ -47,9 +48,9 @@ void alarm() {
 
 void successBeep() {
     digitalWrite(GREEN_LED, HIGH);
-    digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);   // LOW = 响
     delay(80);
-    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(BUZZER_PIN, HIGH);  // HIGH = 静音
     digitalWrite(GREEN_LED, LOW);
 }
 

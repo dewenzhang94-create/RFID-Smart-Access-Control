@@ -1,6 +1,6 @@
 /**
  * mqtt.cpp - MQTT 通信模块
- * 基于 PubSubClient, 负责消息发布 + 接收远程指令
+ * 基于 PubSubClient, 负责消息发布 + 接收远程指令 + 用户白名单同步
  */
 
 #include "mqtt.h"
@@ -9,29 +9,39 @@
 WiFiClient   wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-// --- 远程指令回调 ---
-static void (*_cmdCallback)(const char* cmd) = nullptr;
+// --- 回调指针 ---
+static void (*_cmdCallback)(const char* cmd)   = nullptr;
+static void (*_usersCallback)(const char* json) = nullptr;
 
 // --- 重连参数 ---
 #define MQTT_RETRY_DELAY 5000
-#define TOPIC_CMD       "rfid/cmd"
+
+// --- MQTT 接收缓冲区 (PubSubClient 默认 256B 不够用) ---
+#define MQTT_RX_BUF 1024
 
 // ============================================
 // 内部: 收到订阅消息
 // ============================================
 
 static void _onMessage(char* topic, byte* payload, unsigned int length) {
-    // 只处理 rfid/cmd
-    if (strcmp(topic, TOPIC_CMD) != 0) return;
-    if (!_cmdCallback || length == 0) return;
+    // 空消息忽略
+    if (length == 0) return;
 
-    char cmd[32] = {0};
-    unsigned int len = length < 31 ? length : 31;
-    memcpy(cmd, payload, len);
-    cmd[len] = '\0';
+    // 复制 payload 到 C 字符串
+    char buf[MQTT_RX_BUF] = {0};
+    unsigned int len = length < (MQTT_RX_BUF - 1) ? length : (MQTT_RX_BUF - 1);
+    memcpy(buf, payload, len);
 
-    Serial.printf("MQTT: Received command: [%s] -> %s\n", topic, cmd);
-    _cmdCallback(cmd);
+    if (strcmp(topic, TOPIC_CMD) == 0) {
+        // === rfid/cmd: 控制指令 ===
+        Serial.printf("MQTT: cmd = %s\n", buf);
+        if (_cmdCallback) _cmdCallback(buf);
+
+    } else if (strcmp(topic, TOPIC_USERS) == 0) {
+        // === rfid/users: 用户白名单同步 ===
+        Serial.printf("MQTT: users sync (%d bytes)\n", len);
+        if (_usersCallback) _usersCallback(buf);
+    }
 }
 
 // ============================================
@@ -40,13 +50,14 @@ static void _onMessage(char* topic, byte* payload, unsigned int length) {
 
 void mqttInit() {
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
-    mqttClient.setBufferSize(512);
+    mqttClient.setBufferSize(MQTT_RX_BUF);
     mqttClient.setCallback(_onMessage);
-    Serial.printf("MQTT: Broker set to %s:%d\n", MQTT_BROKER, MQTT_PORT);
+    Serial.printf("MQTT: Broker set to %s:%d (buf=%d)\n",
+                  MQTT_BROKER, MQTT_PORT, MQTT_RX_BUF);
 }
 
 // ============================================
-// 连接 Broker (阻塞, 自动重连), 订阅命令主题
+// 连接 Broker + 订阅主题
 // ============================================
 
 void mqttConnect() {
@@ -56,9 +67,9 @@ void mqttConnect() {
     while (!mqttClient.connected()) {
         if (mqttClient.connect(DEVICE_ID)) {
             Serial.println("MQTT: Connected!");
-            // 订阅远程指令
             mqttClient.subscribe(TOPIC_CMD);
-            Serial.printf("MQTT: Subscribed to %s\n", TOPIC_CMD);
+            mqttClient.subscribe(TOPIC_USERS);
+            Serial.printf("MQTT: Subscribed to %s, %s\n", TOPIC_CMD, TOPIC_USERS);
         } else {
             Serial.printf("MQTT: Failed (rc=%d), retrying in %dms...\n",
                           mqttClient.state(), MQTT_RETRY_DELAY);
@@ -78,7 +89,8 @@ bool publishMessage(const char* topic, const char* msg) {
             Serial.println("MQTT: Reconnect failed, message dropped");
             return false;
         }
-        mqttClient.subscribe(TOPIC_CMD);  // 重连后重新订阅
+        mqttClient.subscribe(TOPIC_CMD);
+        mqttClient.subscribe(TOPIC_USERS);
     }
 
     bool ok = mqttClient.publish(topic, msg);
@@ -91,25 +103,25 @@ bool publishMessage(const char* topic, const char* msg) {
 }
 
 // ============================================
-// MQTT 心跳 (必须在 loop() 中周期性调用)
+// MQTT 心跳
 // ============================================
 
 void mqttLoop() {
     mqttClient.loop();
 }
 
-// ============================================
-// 查询连接状态
-// ============================================
-
 bool isMqttConnected() {
     return mqttClient.connected();
 }
 
 // ============================================
-// 注册远程指令回调
+// 注册回调
 // ============================================
 
 void onRemoteCommand(void (*cb)(const char* cmd)) {
     _cmdCallback = cb;
+}
+
+void onUsersSync(void (*cb)(const char* json)) {
+    _usersCallback = cb;
 }

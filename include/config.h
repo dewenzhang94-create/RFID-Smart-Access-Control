@@ -19,6 +19,8 @@
 #define TOPIC_ALARM    "rfid/alarm"
 #define TOPIC_DOOR     "rfid/door"
 #define TOPIC_SYSTEM   "rfid/system"
+#define TOPIC_CMD      "rfid/cmd"      // 远程指令
+#define TOPIC_USERS    "rfid/users"    // 用户白名单同步
 
 // --- AES-128 密钥 (16 字节，生产环境中需保密) ---
 #define AES_KEY_BYTES  \

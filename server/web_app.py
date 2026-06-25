@@ -111,9 +111,17 @@ def mqtt_on_connect(client, userdata, flags, reason_code, properties=None):
     print(f"[Web] MQTT connected")
     for topic in MQTT_TOPICS:
         client.subscribe(topic)
+    # Also subscribe to rfid/cmd to catch sync_users requests from ESP32
+    client.subscribe("rfid/cmd")
 
 
 def mqtt_on_message(client, userdata, msg):
+    # Handle sync_users command from ESP32
+    if msg.topic == "rfid/cmd" and msg.payload.decode('utf-8', errors='replace').strip() == "sync_users":
+        print(f"[Web] ESP32 requested user sync, publishing full list...")
+        publish_user_sync()
+        return
+
     try:
         raw = msg.payload.decode('utf-8')
         # 尝试 AES 解密（如果是加密数据）
@@ -221,6 +229,23 @@ def publish_cmd(cmd: str):
         return True
     except Exception as e:
         print(f"[Web] MQTT publish error: {e}")
+        return False
+
+
+def publish_user_sync():
+    """下发完整白名单到 ESP32 (通过 rfid/users topic)"""
+    import paho.mqtt.publish as publish
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("SELECT uid, username FROM users ORDER BY uid").fetchall()
+        conn.close()
+        users = [{"uid": r[0], "username": r[1]} for r in rows]
+        payload = json.dumps(users, ensure_ascii=False)
+        publish.single("rfid/users", payload, hostname=MQTT_BROKER, port=MQTT_PORT)
+        print(f"[Web] User sync published: {len(users)} users")
+        return True
+    except Exception as e:
+        print(f"[Web] User sync error: {e}")
         return False
 
 
@@ -675,6 +700,8 @@ def api_add_card():
             (uid, username)
         )
         db.commit()
+        # Push to ESP32: add single user
+        publish_cmd(f"sync_user_add:{uid}:{username}")
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -687,6 +714,8 @@ def api_delete_card(uid):
     db = get_db()
     db.execute("DELETE FROM users WHERE uid = ?", (uid,))
     db.commit()
+    # Push to ESP32: delete single user
+    publish_cmd(f"sync_user_del:{uid}")
     return jsonify({'ok': True})
 
 

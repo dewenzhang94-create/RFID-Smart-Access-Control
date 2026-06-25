@@ -12,7 +12,7 @@
 void mqttInit();
 
 /**
- * @brief 连接 MQTT Broker (阻塞直到成功)
+ * @brief 连接 MQTT Broker (阻塞直到成功), 同时订阅 rfid/cmd 和 rfid/users
  */
 void mqttConnect();
 
@@ -36,9 +36,15 @@ void mqttLoop();
 bool isMqttConnected();
 
 /**
- * @brief 注册收到远程指令时的回调
+ * @brief 注册收到远程指令时的回调 (rfid/cmd)
  * @param cb 回调函数, 参数为指令字符串 (如 "unlock", "lock", "alarm_test")
  */
 void onRemoteCommand(void (*cb)(const char* cmd));
+
+/**
+ * @brief 注册收到用户同步数据时的回调 (rfid/users)
+ * @param cb 回调函数, 参数为 JSON 字符串
+ */
+void onUsersSync(void (*cb)(const char* json));
 
 #endif
