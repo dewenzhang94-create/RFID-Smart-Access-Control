@@ -40,6 +40,7 @@ static String       currentUid  = "";
 static String       currentUser = "";
 static unsigned long stateEnterTime = 0;
 static unsigned long lastHeartbeat  = 0;
+static bool          doorOpen   = false;  // 本地门状态追踪
 
 // ============================================
 // 辅助函数声明
@@ -100,6 +101,7 @@ void setup() {
         // --- 远程门禁控制 ---
         if (strcmp(cmd, "unlock") == 0) {
             servoUnlock();
+            doorOpen = true;
             successBeep();
             String doorMsg = buildJson("", "REMOTE", "door_open");
             String doorEnc = encryptData(doorMsg);
@@ -108,6 +110,7 @@ void setup() {
             stateEnterTime = millis();
         } else if (strcmp(cmd, "lock") == 0) {
             servoLock();
+            doorOpen = false;
             String doorMsg = buildJson("", "REMOTE", "door_close");
             String doorEnc = encryptData(doorMsg);
             publishMessage(TOPIC_DOOR, doorEnc.c_str());
@@ -223,6 +226,7 @@ void loop() {
             if (millis() - stateEnterTime > AUTH_TIMEOUT) {
                 Serial.println(F("MAIN: Auth timeout, locking..."));
                 servoLock();
+                doorOpen = false;
                 ledGreen(false);
 
                 // 上报锁门事件
@@ -263,6 +267,7 @@ void loop() {
             if (!detectFire()) {
                 Serial.println(F("MAIN: Fire cleared, locking..."));
                 servoLock();
+                doorOpen = false;
                 ledRed(false);
                 digitalWrite(25, HIGH);
                 resetToIdle();
@@ -303,6 +308,7 @@ static void handleCardAuth() {
 
         // 舵机开锁
         servoUnlock();
+        doorOpen = true;
 
         // 蜂鸣器成功提示
         successBeep();
@@ -332,6 +338,16 @@ static void handleCardAuth() {
         Serial.printf("MAIN: UNAUTHORIZED - UID = %s\n", uid.c_str());
 
         showMessage("Access Denied!", "Unknown Card");
+
+        // 立即锁门 (防止门开着时非法闯入)
+        if (doorOpen) {
+            servoLock();
+            doorOpen = false;
+            String doorMsg = buildJson(uid, "Unknown", "door_close");
+            String doorEnc = encryptData(doorMsg);
+            publishMessage(TOPIC_DOOR, doorEnc.c_str());
+            Serial.println(F("MAIN: Door locked on unauthorized!"));
+        }
 
         alarm();
 
@@ -369,6 +385,7 @@ static void handleEnvMonitor() {
 
         // 紧急开锁
         servoUnlock();
+        doorOpen = true;
 
         // 持续报警
         digitalWrite(25, LOW);   // LOW = 响
@@ -388,6 +405,17 @@ static void handleEnvMonitor() {
     if (smoke && !fire && state != STATE_ALARM && state != STATE_FIRE) {
         Serial.printf("MAIN: SMOKE ALARM! value=%d\n", smokeVal);
         showMessage("SMOKE ALARM!", String(smokeVal));
+
+        // 烟雾报警开锁疏散
+        if (!doorOpen) {
+            servoUnlock();
+            doorOpen = true;
+            String unlockMsg = buildJson("", "SYSTEM", "door_open");
+            String unlockEnc = encryptData(unlockMsg);
+            publishMessage(TOPIC_DOOR, unlockEnc.c_str());
+            Serial.println(F("MAIN: Door unlocked on smoke alarm!"));
+        }
+
         alarm();
 
         String smokeMsg = buildEnvJson(temp, hum, smokeVal, false);
@@ -446,7 +474,8 @@ static String buildEnvJson(float temp, float hum, uint16_t smoke, bool fire) {
     json += "\"humidity\":" + String(hum, 1) + ",";
     json += "\"smoke\":" + String(smoke) + ",";
     json += "\"fire\":" + String(fire ? "true" : "false") + ",";
-    json += "\"human\":" + String(detectHuman() ? "true" : "false");
+    json += "\"door\":"   + String(doorOpen ? "true" : "false") + ",";
+    json += "\"human\":"  + String(detectHuman() ? "true" : "false");
     json += "}";
     return json;
 }
@@ -456,6 +485,15 @@ static String buildEnvJson(float temp, float hum, uint16_t smoke, bool fire) {
 // ============================================
 
 static void resetToIdle() {
+    // 强制锁门 (安全兜底, 无论从哪个状态退回都必须锁)
+    if (doorOpen) {
+        servoLock();
+        doorOpen = false;
+        String msg = buildJson(currentUid, currentUser, "door_close");
+        String encrypted = encryptData(msg);
+        publishMessage(TOPIC_DOOR, encrypted.c_str());
+        Serial.println(F("MAIN: Door locked by resetToIdle"));
+    }
     state = STATE_IDLE;
     stateEnterTime = millis();
     currentUid = "";

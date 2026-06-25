@@ -107,11 +107,14 @@ def hash_pw(password: str) -> str:
 # MQTT 实时监听线程
 # ============================================
 
+_mqtt_persistent_client = None  # 持久连接, 供 publish_cmd 复用
+
 def mqtt_on_connect(client, userdata, flags, reason_code, properties=None):
+    global _mqtt_persistent_client
+    _mqtt_persistent_client = client
     print(f"[Web] MQTT connected")
     for topic in MQTT_TOPICS:
         client.subscribe(topic)
-    # Also subscribe to rfid/cmd to catch sync_users requests from ESP32
     client.subscribe("rfid/cmd")
 
 
@@ -180,20 +183,24 @@ def mqtt_on_message(client, userdata, msg):
                 live_data['smoke'] = data['smoke']
                 live_data['fire'] = data.get('fire', False)
                 live_data['human'] = data.get('human', False)
+            # 从心跳同步门锁状态 (每30秒自愈)
+            if data.get('door') is not None:
+                live_data['door_open'] = data['door'] if isinstance(data['door'], bool) else (data['door'] == 'true')
         elif event == 'system_start':
             live_data['online'] = True
 
-        # 实时写入数据库
-        try:
-            _db = sqlite3.connect(DB_PATH)
-            _db.execute(
-                "INSERT INTO logs (uid, username, event, access_time) VALUES (?, ?, ?, ?)",
-                (uid, username, event, access_time)
-            )
-            _db.commit()
-            _db.close()
-        except:
-            pass
+        # 实时写入数据库 (心跳不写库, 避免日志膨胀)
+        if event != 'heartbeat':
+            try:
+                _db = sqlite3.connect(DB_PATH)
+                _db.execute(
+                    "INSERT INTO logs (uid, username, event, access_time) VALUES (?, ?, ?, ?)",
+                    (uid, username, event, access_time)
+                )
+                _db.commit()
+                _db.close()
+            except:
+                pass
 
 
 def mqtt_thread():
@@ -371,10 +378,17 @@ def monitor():
 @app.route('/api/live')
 @login_required
 def api_live():
-    """获取实时数据"""
+    """获取实时数据 (含离线检测: 超65秒没收心跳则判定离线)"""
     with live_lock:
         data = dict(live_data)
-        data['logs'] = list(data['logs'][:10])  # 只返回最近10条
+        data['logs'] = list(data['logs'][:10])
+        if data.get('last_heartbeat'):
+            try:
+                hb = datetime.strptime(data['last_heartbeat'], '%Y-%m-%dT%H:%M:%S')
+                if (datetime.now() - hb).total_seconds() > 65:
+                    data['online'] = False
+            except:
+                pass
     return jsonify(data)
 
 
@@ -459,8 +473,11 @@ def api_smart_cmd():
     if cmd == 'chat':
         return jsonify({'ok': True, 'cmd': cmd, 'reply': reply, 'mode': mode, 'action': False})
 
-    # 执行类指令: 权限检查 + MQTT 下发
-    if cmd in ('unlock', 'lock') and session.get('role', 'admin') != 'admin':
+    # 执行类指令: 必须登录 + 权限检查 + MQTT 下发
+    if 'user_id' not in session:
+        return jsonify({'ok': False, 'reply': '请先登录后再控制设备', 'action': False, 'need_login': True})
+
+    if cmd in ('unlock', 'lock') and session.get('role') != 'admin':
         return jsonify({'ok': False, 'reply': '抱歉，仅管理员可以远程控制门锁', 'action': False})
 
     ok = publish_cmd(cmd)
