@@ -540,15 +540,20 @@ const AnalysisPage = {
 const SmartAnalysis = {
   template: `
 <div class="page-grid">
-  <div class="page-grid cols-4">
-    <div class="env-card env-card-sm"><div class="env-val">{{d.temperature!=null?d.temperature.toFixed(1)+'°C':'--°C'}}</div><div class="env-lbl">🌡️ 室内温度</div></div>
-    <div class="env-card env-card-sm"><div class="env-val">{{d.humidity!=null?d.humidity.toFixed(1)+'%':'--%'}}</div><div class="env-lbl">💧 相对湿度</div></div>
-    <div class="env-card env-card-sm"><div class="env-val">{{d.smoke!=null?d.smoke:'--'}}</div><div class="env-lbl">💨 烟雾浓度</div></div>
+  <!-- ====== 曲线图区 ====== -->
+  <div class="page-grid cols-3">
+    <div class="glass-card fade-up fade-up-1" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>🌡️ 温度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.temperature!=null?d.temperature.toFixed(1)+'°C':'--'}}</span></div><div class="chart-box" id="chartTemp" style="height:220px"></div></div>
+    <div class="glass-card fade-up fade-up-2" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💧 湿度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.humidity!=null?d.humidity.toFixed(1)+'%':'--'}}</span></div><div class="chart-box" id="chartHum"  style="height:220px"></div></div>
+    <div class="glass-card fade-up fade-up-3" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💨 烟雾趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.smoke!=null?d.smoke:'--'}}</span></div><div class="chart-box" id="chartSmoke" style="height:220px"></div></div>
+  </div>
+  <!-- ====== 火焰 + 摘要 ====== -->
+  <div class="page-grid cols-2">
     <div class="env-card env-card-sm" :class="d.fire?'alarm-flash':''"><div class="env-val">{{d.fire?'🔴 有火':'🟢 安全'}}</div><div class="env-lbl">🔥 火焰状态</div></div>
+    <div :class="summaryClass" class="summary-bar" v-if="d.summary" style="margin:0">{{d.summary}}</div>
   </div>
   <div style="text-align:center;color:var(--text-muted);font-size:.75rem">📋 分析依据: GB/T 18883-2022 | GB 50736-2012 | GB 50325-2020</div>
-  <div :class="summaryClass" class="summary-bar" v-if="d.summary">{{d.summary}}</div>
-  <div v-if="!d.insights||!d.insights.length" style="text-align:center;padding:3rem"><el-empty description="暂无传感器数据"/></div>
+  <!-- ====== 分析结论 ====== -->
+  <div v-if="!d.insights||!d.insights.length" style="text-align:center;padding:2rem"><el-empty description="暂无传感器数据"/></div>
   <div v-for="ins in (d.insights||[])" :key="ins.title" :class="'insight-card insight-'+ins.level">
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:.4rem">{{{'danger':'🔴','warning':'🟡','info':'🔵','good':'🟢'}[ins.level]}} {{ins.title}}</div>
     <div style="font-size:.9rem;line-height:1.8;color:#ccc;margin-bottom:.6rem">{{ins.detail}}</div>
@@ -557,10 +562,38 @@ const SmartAnalysis = {
   </div>
 </div>`,
   props:{role:String,username:String},
-  data(){return{d:{},timer:null}},
+  data(){return{d:{},timer:null,tHistory:[],hHistory:[],sHistory:[],timeLabels:[]}},
   mounted(){this.$emit('update-title','智能分析');this.refresh();this.timer=setInterval(this.refresh,5000)},
-  beforeUnmount(){clearInterval(this.timer)},
-  methods:{async refresh(){try{this.d=await api.get('/api/smart_analysis')}catch(e){}}},
+  beforeUnmount(){clearInterval(this.timer);this._disposeCharts()},
+  methods:{
+    _disposeCharts(){['chartTemp','chartHum','chartSmoke'].forEach(id=>{try{const d=document.getElementById(id);if(d&&d._chart){d._chart.dispose();d._chart=null}}catch(e){}})},
+    _initOrUpdateChart(id,data,color,unit){
+      const box=document.getElementById(id);if(!box)return;
+      if(!box._chart){box._chart=echarts.init(box);}
+      const labels=this.timeLabels;
+      box._chart.setOption({
+        grid:{top:12,right:12,bottom:24,left:48},
+        xAxis:{type:'category',data:labels,axisLabel:{color:'#64748b',fontSize:9,rotate:45,interval:Math.max(1,Math.floor(labels.length/6))},axisLine:{lineStyle:{color:'rgba(255,255,255,.08)'}},splitLine:{show:false}},
+        yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9},axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}},
+        series:[{data:data,type:'line',smooth:true,showSymbol:false,lineStyle:{color:color,width:2},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:color+'40'},{offset:1,color:color+'05'}])}}],
+        animation:true,animationDuration:400
+      },true);
+    },
+    async refresh(){
+      try{this.d=await api.get('/api/smart_analysis')}catch(e){return}
+      const now=new Date();
+      const ts=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
+      this.timeLabels.push(ts);if(this.timeLabels.length>120)this.timeLabels.shift();
+      this.tHistory.push(this.d.temperature!=null?this.d.temperature:null);if(this.tHistory.length>120)this.tHistory.shift();
+      this.hHistory.push(this.d.humidity!=null?this.d.humidity:null);if(this.hHistory.length>120)this.hHistory.shift();
+      this.sHistory.push(this.d.smoke!=null?this.d.smoke:null);if(this.sHistory.length>120)this.sHistory.shift();
+      this.$nextTick(()=>{
+        this._initOrUpdateChart('chartTemp',this.tHistory,'#f97316');
+        this._initOrUpdateChart('chartHum', this.hHistory,'#06b6d4');
+        this._initOrUpdateChart('chartSmoke',this.sHistory,'#818cf8');
+      });
+    }
+  },
   computed:{
     summaryClass(){
       if(this.d.fire||(this.d.insights||[]).some(i=>i.level==='danger')) return 'summary-danger';
