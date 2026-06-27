@@ -32,7 +32,8 @@ enum SystemState {
     STATE_WAIT_CARD,     // 有人靠近, 等待刷卡
     STATE_AUTHENTICATED, // 认证通过
     STATE_ALARM,         // 报警状态
-    STATE_FIRE           // 火灾: 开锁 + 持续报警
+    STATE_FIRE,          // 火灾: 开锁 + 持续报警
+    STATE_LEARN_CARD     // 刷卡录入: 等待刷入新卡
 };
 
 static SystemState  state = STATE_IDLE;
@@ -40,12 +41,14 @@ static String       currentUid  = "";
 static String       currentUser = "";
 static unsigned long stateEnterTime = 0;
 static unsigned long lastHeartbeat  = 0;
-static bool          doorOpen   = false;  // 本地门状态追踪
+static bool          doorOpen       = false;
+static String        learnCardName  = "";
 
 // ============================================
 // 辅助函数声明
 // ============================================
 static String buildJson(String uid, String username, String event);
+static String buildLearnJson(String uid, String name);
 static String buildEnvJson(float temp, float hum, uint16_t smoke, bool fire);
 static void   handleCardAuth();
 static void   handleEnvMonitor();
@@ -140,9 +143,14 @@ void setup() {
 
         // --- 完整白名单下发 (list命令) ---
         } else if (strcmp(cmd, "sync_user_list") == 0) {
-            // 服务器通过 rfid/users topic 下发完整 JSON
-            // 这里只是通知, 实际数据由 onUsersSync 回调处理
             showMessage("Syncing...", "User List");
+
+        // --- 刷卡录入模式 ---
+        } else if (strncmp(cmd, "learn:", 6) == 0) {
+            learnCardName = String(cmd + 6);
+            state = STATE_LEARN_CARD;
+            stateEnterTime = millis();
+            showMessage("Scan Card For", learnCardName);
         }
     });
 
@@ -271,6 +279,32 @@ void loop() {
                 ledRed(false);
                 digitalWrite(25, HIGH);
                 resetToIdle();
+            }
+            break;
+        }
+
+        // ========================================
+        // 刷卡录入: 读取UID后上报服务器
+        // ========================================
+        case STATE_LEARN_CARD: {
+            if (millis() - stateEnterTime > 30000) {
+                showMessage("Learn Timeout");
+                delay(1500);
+                resetToIdle();
+                break;
+            }
+            if (isNewCardPresent()) {
+                String uid = readUID();
+                haltCard();
+                String learnMsg = buildLearnJson(uid, learnCardName);
+                String learnEnc = encryptData(learnMsg);
+                publishMessage(TOPIC_SYSTEM, learnEnc.c_str());
+                showMessage("Card Registered!", learnCardName);
+                successBeep();
+                delay(2000);
+                state = STATE_IDLE;
+                stateEnterTime = millis();
+                showMessage("System Ready");
             }
             break;
         }
@@ -453,6 +487,16 @@ static void publishSystemHeartbeat() {
 // ============================================
 // 构建 JSON 消息
 // ============================================
+
+static String buildLearnJson(String uid, String name) {
+    String json = "{";
+    json += "\"uid\":\""     + uid  + "\",";
+    json += "\"username\":\"" + name + "\",";
+    json += "\"event\":\"card_learned\",";
+    json += "\"time\":\""     + getTimestamp() + "\"";
+    json += "}";
+    return json;
+}
 
 static String buildJson(String uid, String username, String event) {
     String json = "{";

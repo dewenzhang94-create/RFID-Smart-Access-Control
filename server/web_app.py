@@ -31,6 +31,14 @@ MQTT_TOPIC_CMD = 'rfid/cmd'
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# 禁用缓存 (确保前端始终获取最新版本)
+@app.after_request
+def no_cache(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 # ============================================
 # 实时数据缓存 (MQTT → Web 页面)
 # ============================================
@@ -188,6 +196,21 @@ def mqtt_on_message(client, userdata, msg):
                 live_data['door_open'] = data['door'] if isinstance(data['door'], bool) else (data['door'] == 'true')
         elif event == 'system_start':
             live_data['online'] = True
+        elif event == 'card_learned':
+            new_uid  = data.get('uid', '')
+            new_name = data.get('username', '')
+            if new_uid and new_name:
+                try:
+                    _db = sqlite3.connect(DB_PATH)
+                    _db.execute(
+                        "INSERT OR REPLACE INTO users (uid, username, role) VALUES (?, ?, 'user')",
+                        (new_uid, new_name)
+                    )
+                    _db.commit(); _db.close()
+                    live_data['learn_result'] = {'ok': True, 'uid': new_uid, 'name': new_name}
+                    publish_cmd(f"sync_user_add:{new_uid}:{new_name}")
+                except Exception as ex:
+                    live_data['learn_result'] = {'ok': False, 'error': str(ex)}
 
         # 实时写入数据库 (心跳不写库, 避免日志膨胀)
         if event != 'heartbeat':
@@ -358,9 +381,7 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 # ============================================
@@ -370,9 +391,7 @@ def dashboard():
 @app.route('/monitor')
 @login_required
 def monitor():
-    return render_template('monitor.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 @app.route('/api/live')
@@ -399,9 +418,7 @@ def api_live():
 @app.route('/control')
 @login_required
 def control():
-    return render_template('control.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 @app.route('/api/cmd', methods=['POST'])
@@ -491,18 +508,13 @@ def api_smart_cmd():
 @app.route('/analysis')
 @login_required
 def analysis():
-    return render_template('analysis.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 @app.route('/analysis/smart')
 @login_required
 def smart_analysis():
-    """智能环境数据分析页面"""
-    return render_template('smart_analysis.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 @app.route('/api/smart_analysis')
@@ -620,9 +632,7 @@ def api_stats():
 @app.route('/admin/users')
 @admin_required
 def admin_users():
-    return render_template('admin_users.html',
-                           role=session['role'],
-                           username=session['username'])
+    return app.send_static_file('spa.html')
 
 
 @app.route('/api/admin/users')
@@ -734,6 +744,31 @@ def api_delete_card(uid):
     # Push to ESP32: delete single user
     publish_cmd(f"sync_user_del:{uid}")
     return jsonify({'ok': True})
+
+
+@app.route('/api/admin/learn_card', methods=['POST'])
+@admin_required
+def api_learn_card():
+    """刷卡录入: 前端输入名字 -> ESP32 等待刷卡"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': '名称不能为空'})
+    with live_lock:
+        live_data.pop('learn_result', None)
+    ok = publish_cmd(f"learn:{name}")
+    return jsonify({'ok': ok, 'status': 'waiting'})
+
+
+@app.route('/api/admin/learn_status')
+@admin_required
+def api_learn_status():
+    """轮询刷卡录入结果"""
+    with live_lock:
+        result = live_data.pop('learn_result', None)
+    if result:
+        return jsonify({'ok': True, 'done': True, 'uid': result.get('uid'), 'name': result.get('name')})
+    return jsonify({'ok': True, 'done': False})
 
 
 # ============================================
