@@ -48,10 +48,12 @@ GPIO 4   ───────────────── MFRC522 RST
 GPIO 5   ───────────────── MFRC522 SDA/SS
 GPIO 13  ───────────────── DHT22 DATA
 GPIO 14  ───────────────── SG90 舵机信号 (LEDC PWM)
+GPIO 16  ───────────────── OLED SDA (I2C)
+GPIO 17  ───────────────── OLED SCL (I2C)
 GPIO 18  ───────────────── MFRC522 SCK
 GPIO 19  ───────────────── MFRC522 MISO
-GPIO 21  ───────────────── OLED SDA (I2C)
-GPIO 22  ───────────────── OLED SCL (I2C)
+GPIO 21  ───────────────── (空闲)
+GPIO 22  ───────────────── (空闲)
 GPIO 23  ───────────────── MFRC522 MOSI
 GPIO 25  ───────────────── 有源蜂鸣器 I/O
 GPIO 26  ───────────────── 火焰传感器 DO
@@ -165,6 +167,7 @@ AES-128-CBC 加密 → MQTT 上报 → 服务器记录日志
 - **在线模式**：管理员在网页增删卡 → 数据库写入 → MQTT 推送 → ESP32 秒级同步
 - **离线模式**：自动回退到出厂默认 4 人白名单，断网也能正常刷卡
 - **重启恢复**：ESP32 启动时自动向服务器请求完整白名单
+- **人体检测优化**：PIR 状态变化立刻 MQTT 上报，前端秒级显示有人/无人，不再等 30s 心跳
 
 ## MQTT 通信协议
 
@@ -197,8 +200,10 @@ AES-128-CBC 加密 → MQTT 上报 → 服务器记录日志
 基于国标 (GB/T 18883-2022, GB 50736-2012, GB 50325-2020) 的环境数据解读和建议
 
 ### 权限管理
-- 账户管理：增删 Web 登录用户，分配 admin/user 角色
-- 卡片管理：增删 RFID 授权卡，自动同步到 ESP32
+- **账户管理**：增删 Web 登录用户，分配 admin/user 角色。仅管理员可访问
+- **刷卡录入**：点绿色按钮 → 输入持卡人姓名 → 把新卡放上读卡器 → 自动入库并同步 ESP32 白名单（全程 AES 加密）
+- **批量删除**：点红色按钮 → 勾选要删的卡 → 确认后批量移除并同步。出厂默认卡（张三/李四/王五/ZDW）受保护不可删
+- **空状态显示**：录入期间 OLED 显示 "Scan Card For XXX"，30 秒超时自动退出
 
 ### 语音控制
 点右下角麦克风按钮，支持：
@@ -212,7 +217,7 @@ AES-128-CBC 加密 → MQTT 上报 → 服务器记录日志
 **users** — RFID 卡白名单 (uid, username, role)
 **logs** — 事件日志 (uid, username, event, time)
 
-event 类型: `login`(认证通过), `door_open`(开门), `door_close`(关门), `unauthorized`(非法刷卡), `heartbeat`(心跳), `system_start`(启动)
+event 类型: `login`(认证通过), `door_open`(开门), `door_close`(关门), `unauthorized`(非法刷卡), `heartbeat`(心跳/30s), `system_start`(启动), `human_detected`(有人靠近/即时), `human_left`(人离开/即时), `card_learned`(刷卡录入)
 
 ## 安全机制
 
