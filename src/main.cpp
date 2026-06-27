@@ -43,6 +43,7 @@ static unsigned long stateEnterTime = 0;
 static unsigned long lastHeartbeat  = 0;
 static bool          doorOpen       = false;
 static String        learnCardName  = "";
+static bool          lastHumanState = false;   // PIR 状态追踪
 
 // ============================================
 // 辅助函数声明
@@ -189,6 +190,17 @@ void loop() {
 
     // --- 环境监测 (始终运行, 火灾时强制切状态) ---
     handleEnvMonitor();
+
+    // --- PIR 状态变化即时上报 (不等30s心跳) ---
+    {
+        bool nowHuman = detectHuman();
+        if (nowHuman != lastHumanState) {
+            lastHumanState = nowHuman;
+            String hMsg = buildJson("", "SYSTEM", nowHuman ? "human_detected" : "human_left");
+            String hEnc = encryptData(hMsg);
+            publishMessage(TOPIC_SYSTEM, hEnc.c_str());
+        }
+    }
 
     // --- 根据系统状态执行不同逻辑 ---
     switch (state) {

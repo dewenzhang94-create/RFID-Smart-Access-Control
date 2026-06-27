@@ -196,6 +196,10 @@ def mqtt_on_message(client, userdata, msg):
                 live_data['door_open'] = data['door'] if isinstance(data['door'], bool) else (data['door'] == 'true')
         elif event == 'system_start':
             live_data['online'] = True
+        elif event == 'human_detected':
+            live_data['human'] = True
+        elif event == 'human_left':
+            live_data['human'] = False
         elif event == 'card_learned':
             new_uid  = data.get('uid', '')
             new_name = data.get('username', '')

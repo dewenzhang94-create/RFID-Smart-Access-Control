@@ -30,7 +30,7 @@
     'e','t','K','1'
 
 // --- 人体检测超时 (ms) ---
-#define HUMAN_TIMEOUT     3000
+#define HUMAN_TIMEOUT     1500
 
 
 // --- 认证超时 (ms) ---
