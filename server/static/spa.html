@@ -403,7 +403,7 @@ const MonitorPage = {
 </div>`,
   props:{role:String,username:String},
   data(){return{live:{},timer:null}},
-  mounted(){this.$emit('update-title','实时监控');this.refresh();this.timer=setInterval(this.refresh,2000)},
+  mounted(){this.$emit('update-title','实时监控');this.refresh();this.timer=setInterval(this.refresh,800)},
   beforeUnmount(){clearInterval(this.timer)},
   methods:{async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},formatTime(t){return t||'--'}}
 };
@@ -440,7 +440,7 @@ const ControlPage = {
 </div>`,
   props:{role:String,username:String},
   data(){return{live:{},cmdLogs:[],timer:null}},
-  mounted(){this.$emit('update-title','远程控制');this.refresh();this.timer=setInterval(this.refresh,2000)},
+  mounted(){this.$emit('update-title','远程控制');this.refresh();this.timer=setInterval(this.refresh,800)},
   beforeUnmount(){clearInterval(this.timer)},
   methods:{
     async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},
@@ -468,22 +468,22 @@ const AnalysisPage = {
     <div class="stat-card fade-up fade-up-4" style="text-align:center"><div class="stat-value" style="color:var(--accent-4)">{{stats.users?stats.users.length:0}}</div><div class="stat-label">活跃用户</div></div>
   </div>
 
-  <!-- Bento 布局区 — 上半: 7日趋势(占8) + 事件饼图(占4) -->
-  <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1rem">
-    <div class="glass-card fade-up fade-up-1" style="grid-column:span 8"><h5 style="margin:0 0 .5rem;font-weight:600">📅 最近 7 天通行趋势</h5><div ref="chartDaily" style="height:300px"></div></div>
-    <div class="glass-card fade-up fade-up-2" style="grid-column:span 4"><h5 style="margin:0 0 .5rem;font-weight:600">📊 事件类型分布</h5><div ref="chartPie" style="height:300px"></div></div>
+  <!-- 第一行: 7日趋势(8) + 饼图(4) -->
+  <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1rem;margin-bottom:1rem">
+    <div class="glass-card fade-up fade-up-1" style="grid-column:span 8;overflow:hidden"><h5 style="margin:0 0 .3rem;font-weight:600">📅 最近 7 天通行趋势</h5><div ref="chartDaily" style="width:100%;height:240px"></div></div>
+    <div class="glass-card fade-up fade-up-2" style="grid-column:span 4;overflow:hidden"><h5 style="margin:0 0 .3rem;font-weight:600">📊 事件类型分布</h5><div ref="chartPie" style="width:100%;height:240px"></div></div>
   </div>
 
-  <!-- Bento 下半 — 用户排行(占5) + 日志查询(占7) -->
+  <!-- 第二行: 用户排行(5) + 日志(7) -->
   <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1rem">
-    <div class="glass-card fade-up fade-up-3" style="grid-column:span 5"><h5 style="margin:0 0 .5rem;font-weight:600">👤 通行用户 Top 10</h5><div ref="chartUsers" style="height:260px"></div></div>
-    <div class="glass-card fade-up fade-up-4" style="grid-column:span 7"><h5 style="margin:0 0 .75rem;font-weight:600">🔍 日志查询</h5>
-      <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+    <div class="glass-card fade-up fade-up-3" style="grid-column:span 5;overflow:hidden"><h5 style="margin:0 0 .3rem;font-weight:600">👤 通行用户 Top 10</h5><div ref="chartUsers" style="width:100%;height:220px"></div></div>
+    <div class="glass-card fade-up fade-up-4" style="grid-column:span 7"><h5 style="margin:0 0 .5rem;font-weight:600">🔍 日志查询</h5>
+      <div style="display:flex;gap:.5rem;margin-bottom:.5rem">
         <el-input v-model="qEvent" placeholder="事件类型" size="small" style="flex:1" />
         <el-input v-model="qUser" placeholder="用户名" size="small" style="flex:1" />
         <el-button type="primary" size="small" @click="searchLogs" style="white-space:nowrap">🔍 搜索</el-button>
       </div>
-      <div style="max-height:220px;overflow-y:auto">
+      <div style="max-height:165px;overflow-y:auto">
         <div v-for="l in searchResults" :key="l.id" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;transition:background .2s"
              @mouseenter="$event.target.style.background='var(--glass-hover)'" @mouseleave="$event.target.style.background='transparent'">
           <span style="color:var(--text-muted);font-family:monospace;white-space:nowrap;min-width:140px">{{ l.access_time }}</span>
@@ -572,12 +572,18 @@ const SmartAnalysis = {
       const box=document.getElementById(id);if(!box)return;
       if(!box._chart){box._chart=echarts.init(box);}
       const labels=this.timeLabels;
+      // 自适应Y轴范围: 从实际数据算min/max, 加30%内边距, 小波动也明显
+      const allNums=data.filter(v=>v!=null);
+      let vmin=Math.floor(Math.min(...allNums));
+      let vmax=Math.ceil(Math.max(...allNums));
+      if(vmin===vmax){vmin-=1;vmax+=1;}
+      const pad=Math.max((vmax-vmin)*0.3,0.5);
       box._chart.setOption({
-        grid:{top:12,right:12,bottom:24,left:48},
-        xAxis:{type:'category',data:labels,axisLabel:{color:'#64748b',fontSize:9,rotate:45,interval:Math.max(1,Math.floor(labels.length/6))},axisLine:{lineStyle:{color:'rgba(255,255,255,.08)'}},splitLine:{show:false}},
-        yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9},axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}},
-        series:[{data:data,type:'line',smooth:true,showSymbol:false,lineStyle:{color:color,width:2},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:color+'40'},{offset:1,color:color+'05'}])}}],
-        animation:true,animationDuration:400
+        grid:{top:16,right:14,bottom:28,left:52},
+        xAxis:{type:'category',data:labels,axisLabel:{color:'#94a3b8',fontSize:9,rotate:45,interval:Math.max(1,Math.floor(labels.length/6))},axisLine:{lineStyle:{color:'rgba(255,255,255,.12)'}},splitLine:{show:false}},
+        yAxis:{type:'value',scale:true,min:vmin-pad,max:vmax+pad,axisLabel:{color:'#cbd5e1',fontSize:10,formatter:v=>v.toFixed(1)},axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(255,255,255,.1)',type:'dashed'}}},
+        series:[{data:data,type:'line',smooth:true,symbol:'circle',symbolSize:5,lineStyle:{color:color,width:3},itemStyle:{color:color},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'55'},{offset:1,color:color+'05'}]}}}],
+        animation:true,animationDuration:300
       },true);
     },
     async refresh(){
@@ -651,7 +657,7 @@ const AdminUsers = {
     async addUser(){const r=await api.post('/api/admin/user',this.addForm);if(r.ok){this.users.push({id:Date.now(),username:this.addForm.username,role:this.addForm.role,created:new Date().toLocaleString()});this.showAddUser=false;ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
     async delUser(u){try{await ElementPlus.ElMessageBox.confirm('确定删除用户 '+u.username+'?','确认',{type:'warning'});const r=await api.del('/api/admin/user/'+u.id);if(r.ok){const i=this.users.findIndex(x=>x.id===u.id);if(i>=0)this.users.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}},
     async changeRole(u){const newRole=u.role==='admin'?'user':'admin';const r=await api.put('/api/admin/user/'+u.id+'/role',{role:newRole});if(r.ok){u.role=newRole;if(u.username===localStorage.getItem('username')){localStorage.setItem('role',newRole)};ElementPlus.ElMessage.success('已更新')}else{ElementPlus.ElMessage.error(r.error||'操作失败')}},
-    async startLearn(){if(this.learning)return;const nm=this.learnName.trim();if(!nm)return;this.learnResult=null;this.learning=true;this.learnProgress=0;this.learnTimer=setInterval(()=>{if(this.learnProgress<90)this.learnProgress+=1},300);try{const r=await api.post('/api/admin/learn_card',{name:nm});if(!r.ok){ElementPlus.ElMessage.error("启动失败");this.cancelLearn();return}this.learnPoll=setInterval(async()=>{try{const s=await api.get('/api/admin/learn_status');if(s.done){this.learnResult={uid:s.uid,name:s.name};this.learnProgress=100;this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.cards.push({uid:s.uid,username:s.name,role:'user',checked:false});ElementPlus.ElMessage.success("录入成功: "+s.name);setTimeout(()=>{if(this.showLearn)this.cancelLearn()},2500)}}catch(e){}},2000)}catch(e){ElementPlus.ElMessage.error("网络错误");this.cancelLearn()}},cancelLearn(){this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.showLearn=false},async addCard(){const r=await api.post('/api/admin/card',this.cardForm);if(r.ok){this.cards.push({uid:this.cardForm.uid.toUpperCase(),username:this.cardForm.username,role:'user'});this.cardForm={uid:'',username:''};ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
+    async startLearn(){if(this.learning)return;const nm=this.learnName.trim();if(!nm)return;this.learnResult=null;this.learning=true;this.learnProgress=0;this.learnTimer=setInterval(()=>{if(this.learnProgress<90)this.learnProgress+=1},300);try{const r=await api.post('/api/admin/learn_card',{name:nm});if(!r.ok){ElementPlus.ElMessage.error("启动失败");this.cancelLearn();return}this.learnPoll=setInterval(async()=>{try{const s=await api.get('/api/admin/learn_status');if(s.done){this.learnResult={uid:s.uid,name:s.name};this.learnProgress=100;this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.cards.push({uid:s.uid,username:s.name,role:'user',checked:false});ElementPlus.ElMessage.success("录入成功: "+s.name);setTimeout(()=>{if(this.showLearn)this.cancelLearn()},2500)}}catch(e){}},800)}catch(e){ElementPlus.ElMessage.error("网络错误");this.cancelLearn()}},cancelLearn(){this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.showLearn=false},async addCard(){const r=await api.post('/api/admin/card',this.cardForm);if(r.ok){this.cards.push({uid:this.cardForm.uid.toUpperCase(),username:this.cardForm.username,role:'user'});this.cardForm={uid:'',username:''};ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
     async batchDelCards(){const sel=this.cards.filter(x=>x.checked);if(!sel.length)return;try{await ElementPlus.ElMessageBox.confirm('确定删除 '+sel.length+' 张卡?','确认',{type:'warning'});const uids=sel.map(x=>x.uid);let ok=0;for(const uid of uids){const r=await api.del('/api/admin/card/'+uid);if(r.ok){const i=this.cards.findIndex(c=>c.uid===uid);if(i>=0)this.cards.splice(i,1);ok++}}ElementPlus.ElMessage.success('已删除 '+ok+' 张卡');this.delMode=false}catch(e){}},cancelDel(){this.delMode=false;this.cards.forEach(x=>x.checked=false)},async delCard(c){try{await ElementPlus.ElMessageBox.confirm('确定删除卡 '+c.uid+'?','确认',{type:'warning'});const r=await api.del('/api/admin/card/'+c.uid);if(r.ok){const i=this.cards.findIndex(x=>x.uid===c.uid);if(i>=0)this.cards.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}}
   }
 };
