@@ -256,11 +256,13 @@ const LoginPage = {
 </div>`,
   data(){return{isLogin:true,loading:false,form:{username:'',password:'',password2:''}}},
   methods:{
+    async _sha256(str){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));return[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');},
     async login(){
       if(!this.form.username||!this.form.password) return ElementPlus.ElMessage.warning('请填写用户名和密码');
       this.loading=true;
       try{
-        const r=await api.post('/api/login',{username:this.form.username,password:this.form.password});
+        const pwHash=await this._sha256(this.form.password);
+        const r=await api.post('/api/login',{username:this.form.username,password:pwHash});
         if(r.ok){localStorage.setItem('role',r.role);localStorage.setItem('username',r.username);this.$router.push('/dashboard')}else{ElementPlus.ElMessage.error(r.error)}
       }catch(e){ElementPlus.ElMessage.error('登录失败')}
       this.loading=false;
@@ -270,7 +272,8 @@ const LoginPage = {
       if(this.form.password!==this.form.password2) return ElementPlus.ElMessage.warning('两次密码不一致');
       this.loading=true;
       try{
-        const r=await api.post('/api/register',{username:this.form.username,password:this.form.password});
+        const pwHash=await this._sha256(this.form.password);
+        const r=await api.post('/api/register',{username:this.form.username,password:pwHash});
         if(r.ok){ElementPlus.ElMessage.success('注册成功！');this.isLogin=true}else{ElementPlus.ElMessage.error(r.error)}
       }catch(e){ElementPlus.ElMessage.error('注册失败')}
       this.loading=false;
@@ -654,7 +657,7 @@ const AdminUsers = {
   mounted(){this.$emit('update-title','权限管理');this.load()},
   methods:{
     async load(){const[u,c]=await Promise.all([api.get('/api/admin/users'),api.get('/api/admin/cards')]);this.users=u;this.cards=c.map(x=>({...x,checked:false}));},
-    async addUser(){const r=await api.post('/api/admin/user',this.addForm);if(r.ok){this.users.push({id:Date.now(),username:this.addForm.username,role:this.addForm.role,created:new Date().toLocaleString()});this.showAddUser=false;ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
+    async addUser(){const t=this.addForm;const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t.password)).then(b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''));const r=await api.post('/api/admin/user',{username:t.username,password:h,role:t.role});if(r.ok){this.users.push({id:Date.now(),username:this.addForm.username,role:this.addForm.role,created:new Date().toLocaleString()});this.showAddUser=false;ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
     async delUser(u){try{await ElementPlus.ElMessageBox.confirm('确定删除用户 '+u.username+'?','确认',{type:'warning'});const r=await api.del('/api/admin/user/'+u.id);if(r.ok){const i=this.users.findIndex(x=>x.id===u.id);if(i>=0)this.users.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}},
     async changeRole(u){const newRole=u.role==='admin'?'user':'admin';const r=await api.put('/api/admin/user/'+u.id+'/role',{role:newRole});if(r.ok){u.role=newRole;if(u.username===localStorage.getItem('username')){localStorage.setItem('role',newRole)};ElementPlus.ElMessage.success('已更新')}else{ElementPlus.ElMessage.error(r.error||'操作失败')}},
     async startLearn(){if(this.learning)return;const nm=this.learnName.trim();if(!nm)return;this.learnResult=null;this.learning=true;this.learnProgress=0;this.learnTimer=setInterval(()=>{if(this.learnProgress<90)this.learnProgress+=1},300);try{const r=await api.post('/api/admin/learn_card',{name:nm});if(!r.ok){ElementPlus.ElMessage.error("启动失败");this.cancelLearn();return}this.learnPoll=setInterval(async()=>{try{const s=await api.get('/api/admin/learn_status');if(s.done){this.learnResult={uid:s.uid,name:s.name};this.learnProgress=100;this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.cards.push({uid:s.uid,username:s.name,role:'user',checked:false});ElementPlus.ElMessage.success("录入成功: "+s.name);setTimeout(()=>{if(this.showLearn)this.cancelLearn()},2500)}}catch(e){}},800)}catch(e){ElementPlus.ElMessage.error("网络错误");this.cancelLearn()}},cancelLearn(){this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.showLearn=false},async addCard(){const r=await api.post('/api/admin/card',this.cardForm);if(r.ok){this.cards.push({uid:this.cardForm.uid.toUpperCase(),username:this.cardForm.username,role:'user'});this.cardForm={uid:'',username:''};ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},

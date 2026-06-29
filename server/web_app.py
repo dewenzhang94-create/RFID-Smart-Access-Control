@@ -338,7 +338,7 @@ def api_login():
         "SELECT * FROM accounts WHERE username = ?", (username,)
     ).fetchone()
 
-    if user and user['password'] == hash_pw(password):
+    if user and user['password'] == password:
         session['user_id'] = user['id']
         session['username'] = user['username']
         session['role'] = user['role']
@@ -366,7 +366,7 @@ def api_register():
 
     db.execute(
         "INSERT INTO accounts (username, password, role) VALUES (?, ?, ?)",
-        (username, hash_pw(password), 'user')
+        (username, password, 'user')
     )
     db.commit()
     return jsonify({'ok': True, 'msg': '注册成功，请重新登录'})
@@ -666,7 +666,7 @@ def api_add_user():
     try:
         db.execute(
             "INSERT INTO accounts (username, password, role) VALUES (?, ?, ?)",
-            (username, hash_pw(password), role)
+            (username, password, role)
         )
         db.commit()
         return jsonify({'ok': True})
