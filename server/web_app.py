@@ -31,6 +31,10 @@ MQTT_TOPIC_CMD = 'rfid/cmd'
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# HTTPS 安全 Cookie 配置
+app.config['SESSION_COOKIE_SECURE'] = True   # 仅通过 HTTPS 传输 session cookie
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # 禁止 JavaScript 读取 cookie，防 XSS
+
 # 禁用缓存 (确保前端始终获取最新版本)
 @app.after_request
 def no_cache(response):
@@ -168,6 +172,8 @@ def mqtt_on_message(client, userdata, msg):
             'smoke': data.get('smoke'),
             'fire': data.get('fire'),
             'human': data.get('human'),
+            'raw': data.get('raw', raw),  # 原始 payload（加密十六进制或明文）
+            'direction': 'up',            # ESP32 → 服务器
         }
         live_data['logs'].insert(0, entry)
         if len(live_data['logs']) > 50:
@@ -260,6 +266,16 @@ def publish_cmd(cmd: str):
     try:
         publish.single("rfid/cmd", cmd, hostname=MQTT_BROKER, port=MQTT_PORT)
         print(f"[Web] MQTT cmd published: {cmd}")
+        # 记录 outgoing 消息到 MQTT 监控
+        with live_lock:
+            live_data['logs'].insert(0, {
+                'topic': 'rfid/cmd', 'uid': '', 'username': 'SERVER',
+                'event': 'cmd_sent', 'time': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+                'temp': None, 'humidity': None, 'smoke': None, 'fire': False, 'human': False,
+                'raw': cmd, 'direction': 'down'
+            })
+            if len(live_data['logs']) > 50:
+                live_data['logs'] = live_data['logs'][:50]
         return True
     except Exception as e:
         print(f"[Web] MQTT publish error: {e}")
@@ -277,6 +293,16 @@ def publish_user_sync():
         payload = json.dumps(users, ensure_ascii=False)
         publish.single("rfid/users", payload, hostname=MQTT_BROKER, port=MQTT_PORT)
         print(f"[Web] User sync published: {len(users)} users")
+        # 记录 outgoing 消息到 MQTT 监控
+        with live_lock:
+            live_data['logs'].insert(0, {
+                'topic': 'rfid/users', 'uid': '', 'username': 'SERVER',
+                'event': 'users_sync', 'time': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+                'temp': None, 'humidity': None, 'smoke': None, 'fire': False, 'human': False,
+                'raw': f'{len(users)} users synced', 'direction': 'down'
+            })
+            if len(live_data['logs']) > 50:
+                live_data['logs'] = live_data['logs'][:50]
         return True
     except Exception as e:
         print(f"[Web] User sync error: {e}")
@@ -401,10 +427,12 @@ def monitor():
 @app.route('/api/live')
 @login_required
 def api_live():
-    """获取实时数据 (含离线检测: 超65秒没收心跳则判定离线)"""
+    """获取实时数据 (含离线检测: 超65秒没收心跳则判定离线). 支持 ?limit=N (1-50, 默认10)"""
+    limit = request.args.get('limit', 10, type=int)
+    limit = max(1, min(50, limit))
     with live_lock:
         data = dict(live_data)
-        data['logs'] = list(data['logs'][:10])
+        data['logs'] = list(data['logs'][:limit])
         if data.get('last_heartbeat'):
             try:
                 hb = datetime.strptime(data['last_heartbeat'], '%Y-%m-%dT%H:%M:%S')
@@ -677,10 +705,13 @@ def api_add_user():
 @app.route('/api/admin/user/<int:uid>', methods=['DELETE'])
 @admin_required
 def api_delete_user(uid):
-    """删除用户 (不能删除自己)"""
+    """删除用户 (不能删除自己, 不能删除超级管理员)"""
     if uid == session['user_id']:
         return jsonify({'ok': False, 'error': '不能删除自己'})
     db = get_db()
+    row = db.execute("SELECT username FROM accounts WHERE id = ?", (uid,)).fetchone()
+    if row and row['username'] == 'zdw':
+        return jsonify({'ok': False, 'error': '超级管理员不可删除'})
     db.execute("DELETE FROM accounts WHERE id = ?", (uid,))
     db.commit()
     return jsonify({'ok': True})
@@ -689,12 +720,15 @@ def api_delete_user(uid):
 @app.route('/api/admin/user/<int:uid>/role', methods=['PUT'])
 @admin_required
 def api_update_role(uid):
-    """修改角色"""
+    """修改角色 (超级管理员不可降级)"""
     if uid == session['user_id']:
         return jsonify({'ok': False, 'error': '不能修改自己的角色'})
+    db = get_db()
+    row = db.execute("SELECT username FROM accounts WHERE id = ?", (uid,)).fetchone()
+    if row and row['username'] == 'zdw':
+        return jsonify({'ok': False, 'error': '超级管理员角色不可修改'})
     data = request.get_json()
     role = data.get('role', 'user')
-    db = get_db()
     db.execute("UPDATE accounts SET role = ? WHERE id = ?", (role, uid))
     db.commit()
     return jsonify({'ok': True})
@@ -741,7 +775,9 @@ def api_add_card():
 @app.route('/api/admin/card/<uid>', methods=['DELETE'])
 @admin_required
 def api_delete_card(uid):
-    """删除授权卡"""
+    """删除授权卡 (超级管理员卡不可删除)"""
+    if uid.upper() == 'FE320102':
+        return jsonify({'ok': False, 'error': '超级管理员卡片不可删除'})
     db = get_db()
     db.execute("DELETE FROM users WHERE uid = ?", (uid,))
     db.commit()
@@ -862,4 +898,5 @@ if __name__ == '__main__':
     t.start()
     time.sleep(1)
 
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False,
+            ssl_context=('cert.pem', 'key.pem'))

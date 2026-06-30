@@ -294,6 +294,7 @@ const MainLayout = {
       <el-menu-item index="/analysis"><el-icon><component is="TrendCharts"/></el-icon><span>数据统计</span></el-menu-item>
       <el-menu-item index="/analysis/smart"><el-icon><component is="Sunny"/></el-icon><span>智能分析</span></el-menu-item>
       <el-menu-item index="/admin/users" v-if="role==='admin'"><el-icon><component is="UserFilled"/></el-icon><span>权限管理</span></el-menu-item>
+      <el-menu-item index="/mqtt-monitor"><el-icon><component is="Link"/></el-icon><span>MQTT 监控</span></el-menu-item>
     </el-menu>
     <div style="position:absolute;bottom:1rem;left:1.2rem">
       <el-tag :type="role==='admin'?'':'success'" size="small">{{ role==='admin'?'管理员':'普通用户' }}</el-tag>
@@ -316,10 +317,10 @@ const MainLayout = {
   data(){return{pageTitle:'仪表盘',role:'',username:'',voiceActive:false,voiceText:'',voiceFeedback:'',showPanel:false,textCmd:"",_rec:null,_panelTimer:null}},
   mounted(){
     this.refreshUser();
-    this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理'}[this.$route.path]||'仪表盘';
+    this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理','/mqtt-monitor':'MQTT 监控'}[this.$route.path]||'仪表盘';
     this._initVoice();
   },
-  watch:{'$route.path'(){this.refreshUser();this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理'}[this.$route.path]||'仪表盘'}},
+  watch:{'$route.path'(){this.refreshUser();this.pageTitle={'/dashboard':'仪表盘','/monitor':'实时监控','/control':'远程控制','/analysis':'数据统计','/analysis/smart':'智能分析','/admin/users':'权限管理','/mqtt-monitor':'MQTT 监控'}[this.$route.path]||'仪表盘'}},
   methods:{keepPanel(){if(this._panelTimer){clearTimeout(this._panelTimer);this._panelTimer=null}},
     startPanelTimer(){this.keepPanel();this._panelTimer=setTimeout(()=>{this.showPanel=false},8000)},
     refreshUser(){this.role=localStorage.getItem('role')||'';this.username=localStorage.getItem('username')||''},logout(){localStorage.clear();this.$router.push('/login')},
@@ -342,19 +343,24 @@ const Dashboard = {
   </div>
   <!-- 表格 + 操作栏 -->
   <div class="page-grid cols-12">
-    <div class="glass-card fade-up fade-up-2 s7"><h5 style="margin:0 0 .75rem;font-weight:600">最近通行记录</h5>
-      <el-table :data="live.logs||[]" size="small" empty-text="等待数据..." max-height="340">
-        <el-table-column prop="time" label="时间" width="170"/><el-table-column prop="uid" label="UID" width="120"/>
-        <el-table-column prop="username" label="用户" width="110"/><el-table-column prop="event" label="事件" width="110">
-          <template #default="s"><el-tag :type="s.row.event==='login'?'success':s.row.event.includes('unauth')?'danger':'info'" size="small" effect="dark">{{s.row.event}}</el-tag></template>
-        </el-table-column><el-table-column prop="topic" label="Topic" min-width="140"/>
+    <div class="glass-card fade-up fade-up-2 s7" style="overflow-x:auto"><h5 style="margin:0 0 .75rem;font-weight:600">最近通行记录</h5>
+      <el-table :data="live.logs||[]" size="small" empty-text="等待数据..." max-height="340" style="min-width:620px">
+        <el-table-column prop="time" label="时间" width="150"/><el-table-column prop="uid" label="UID" width="120"/>
+        <el-table-column prop="username" label="用户" width="100"/><el-table-column prop="event" label="事件" width="130">
+          <template #default="s"><el-tag :color="eventColor(s.row.event)" size="small" effect="dark" style="color:#fff;border:none">{{s.row.event}}</el-tag></template>
+        </el-table-column><el-table-column prop="topic" label="Topic" width="120"/>
       </el-table>
     </div>
     <div class="glass-card fade-up fade-up-3 s5" style="display:flex;flex-direction:column"><h5 style="margin:0 0 .75rem;font-weight:600">快速操作</h5>
       <div style="display:flex;flex-direction:column;gap:.7rem;flex:1">
-        <el-button type="primary" size="large" @click="cmd('unlock')" style="width:100%" v-if="$attrs.role==='admin'"><el-icon style="margin-right:8px"><Unlock/></el-icon>远程开门</el-button>
+        <template v-if="role==='admin'">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+            <el-button type="primary" size="large" @click="cmd('unlock')"><el-icon style="margin-right:4px"><Unlock/></el-icon>开门</el-button>
+            <el-button type="danger" size="large" @click="cmd('lock')"><el-icon style="margin-right:4px"><Lock/></el-icon>锁门</el-button>
+          </div>
+        </template>
         <el-button size="large" @click="cmd('alarm_test')" style="width:100%;background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.3);color:#fbbf24"><el-icon style="margin-right:8px"><Bell/></el-icon>测试报警</el-button>
-        <div v-if="$attrs.role!=='admin'" style="color:var(--text-muted);text-align:center;font-size:.85rem;padding:1rem">🔒 普通用户无远程开门权限</div>
+        <div v-if="role!=='admin'" style="color:var(--text-muted);text-align:center;font-size:.85rem;padding:1rem">🔒 普通用户无远程开门权限</div>
         <div style="background:rgba(255,255,255,.03);border-radius:var(--radius-sm);padding:.8rem 1rem;margin-top:auto">
           <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.2rem">📡 环境简报</div>
           <div style="font-size:.88rem">{{live.temp!=null?live.temp.toFixed(1)+'°C':'--'}} · {{live.humidity!=null?live.humidity.toFixed(1)+'%':'--'}} · {{live.smoke||'--'}} ppm</div>
@@ -368,6 +374,12 @@ const Dashboard = {
   async mounted(){this.$emit('update-title','仪表盘');await this.refresh();this.timer=setInterval(this.refresh,3000)},
   beforeUnmount(){clearInterval(this.timer)},
   methods:{
+    eventColor(e){
+      const m={login:'#22c55e',door_open:'#3b82f6',door_close:'#64748b',unauthorized:'#ef4444',
+        alarm:'#ef4444',heartbeat:'#475569',system_start:'#06b6d4',human_detected:'#a855f7',
+        human_left:'#78716c',card_learned:'#10b981',cmd_sent:'#f97316',users_sync:'#14b8a6'};
+      return m[e]||'#64748b';
+    },
     async refresh(){try{const[r1,r2]=await Promise.all([api.get('/api/stats'),api.get('/api/live')]);this.stats=r1;this.live=r2}catch(e){} },
     async cmd(c){try{const r=await api.post('/api/cmd',{cmd:c});ElMessage[r.ok?'success':'error'](r.ok?'指令已发送':r.error)}catch(e){ElementPlus.ElMessage.error('发送失败')}}
   }
@@ -398,7 +410,7 @@ const MonitorPage = {
          :style="l.event.includes('unauth')||l.event==='illegal_door'?'border-left-color:var(--danger);background:rgba(239,68,68,.06)':'background:transparent'">
       <span style="color:var(--text-muted);font-family:monospace;font-size:.8rem">{{l.time}}</span>
       <span style="margin:0 .5rem;color:var(--glass-border)">|</span>
-      <el-tag :type="l.event==='login'?'success':l.event.includes('unauth')?'danger':'info'" size="small" effect="dark" style="margin-right:.4rem">{{l.event}}</el-tag>
+      <el-tag :color="eventColor(l.event)" size="small" effect="dark" style="margin-right:.4rem;color:#fff;border:none">{{l.event}}</el-tag>
       {{l.username||l.uid||'--'}}
       <span style="color:var(--text-muted);float:right;font-size:.8rem">{{l.topic}}</span>
     </div>
@@ -408,7 +420,7 @@ const MonitorPage = {
   data(){return{live:{},timer:null}},
   mounted(){this.$emit('update-title','实时监控');this.refresh();this.timer=setInterval(this.refresh,800)},
   beforeUnmount(){clearInterval(this.timer)},
-  methods:{async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},formatTime(t){return t||'--'}}
+  methods:{eventColor(e){const m={login:'#22c55e',door_open:'#3b82f6',door_close:'#64748b',unauthorized:'#ef4444',alarm:'#ef4444',heartbeat:'#475569',system_start:'#06b6d4',human_detected:'#a855f7',human_left:'#78716c',card_learned:'#10b981',cmd_sent:'#f97316',users_sync:'#14b8a6'};return m[e]||'#64748b'},async refresh(){try{this.live=await api.get('/api/live')}catch(e){}},formatTime(t){return t||'--'}}
 };
 
 /* ======== 远程控制 ======== */
@@ -420,7 +432,7 @@ const ControlPage = {
       <h5 style="margin:0 0 2rem;font-weight:600">门锁控制</h5>
       <div style="font-size:5rem;margin-bottom:1.5rem;transition:transform .3s" :style="{transform:live.door_open?'rotate(90deg)':'rotate(0deg)'}">{{live.door_open?'🔓':'🔒'}}</div>
       <p style="color:var(--text-muted);margin-bottom:2rem;font-size:1.1rem">当前: <strong :style="{color:live.door_open?'var(--accent-3)':'var(--danger)'}">{{live.door_open?'已开启':'已锁定'}}</strong></p>
-      <template v-if="$attrs.role==='admin'">
+      <template v-if="role==='admin'">
         <el-button type="primary" size="large" circle style="width:130px;height:130px;margin:0 1.2rem" @click="cmd('unlock')"><el-icon size="38"><Unlock/></el-icon></el-button>
         <el-button type="danger" size="large" circle style="width:130px;height:130px;margin:0 1.2rem" @click="cmd('lock')"><el-icon size="38"><Lock/></el-icon></el-button>
       </template>
@@ -490,7 +502,7 @@ const AnalysisPage = {
         <div v-for="l in searchResults" :key="l.id" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;transition:background .2s"
              @mouseenter="$event.target.style.background='var(--glass-hover)'" @mouseleave="$event.target.style.background='transparent'">
           <span style="color:var(--text-muted);font-family:monospace;white-space:nowrap;min-width:140px">{{ l.access_time }}</span>
-          <el-tag :type="l.event==='login'?'success':l.event.includes('unauth')?'danger':'info'" size="small" effect="dark">{{ l.event }}</el-tag>
+          <el-tag :color="eventColor(l.event)" size="small" effect="dark" style="color:#fff;border:none">{{ l.event }}</el-tag>
           <span style="flex:1">{{ l.username||l.uid||'--' }}</span>
         </div>
         <div v-if="!searchResults||!searchResults.length" style="text-align:center;color:var(--text-muted);padding:2rem">
@@ -506,6 +518,7 @@ const AnalysisPage = {
   data(){return{stats:{},searchResults:[],qEvent:'',qUser:''}},
   mounted(){this.$emit('update-title','数据统计');this.load()},
   methods:{
+    eventColor(e){const m={login:'#22c55e',door_open:'#3b82f6',door_close:'#64748b',unauthorized:'#ef4444',alarm:'#ef4444',heartbeat:'#475569',system_start:'#06b6d4',human_detected:'#a855f7',human_left:'#78716c',card_learned:'#10b981',cmd_sent:'#f97316',users_sync:'#14b8a6'};return m[e]||'#64748b'},
     async load(){this.stats=await api.get('/api/stats');this.$nextTick(()=>{this.initCharts()})},
     initCharts(){
       const s=this.stats;
@@ -546,9 +559,9 @@ const SmartAnalysis = {
 <div class="page-grid">
   <!-- ====== 曲线图区 ====== -->
   <div class="page-grid cols-3">
-    <div class="glass-card fade-up fade-up-1" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>🌡️ 温度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.temperature!=null?d.temperature.toFixed(1)+'°C':'--'}}</span></div><div class="chart-box" id="chartTemp" style="height:220px"></div></div>
-    <div class="glass-card fade-up fade-up-2" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💧 湿度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.humidity!=null?d.humidity.toFixed(1)+'%':'--'}}</span></div><div class="chart-box" id="chartHum"  style="height:220px"></div></div>
-    <div class="glass-card fade-up fade-up-3" style="position:relative"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💨 烟雾趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.smoke!=null?d.smoke:'--'}}</span></div><div class="chart-box" id="chartSmoke" style="height:220px"></div></div>
+    <div class="glass-card fade-up fade-up-1" style="position:relative;overflow:visible"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>🌡️ 温度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.temperature!=null?d.temperature.toFixed(1)+'°C':'--'}}</span></div><div class="chart-box" id="chartTemp" style="height:240px"></div></div>
+    <div class="glass-card fade-up fade-up-2" style="position:relative;overflow:visible"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💧 湿度趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.humidity!=null?d.humidity.toFixed(1)+'%':'--'}}</span></div><div class="chart-box" id="chartHum"  style="height:240px"></div></div>
+    <div class="glass-card fade-up fade-up-3" style="position:relative;overflow:visible"><div style="font-weight:700;margin-bottom:.6rem;display:flex;align-items:center;gap:6px"><span>💨 烟雾趋势</span><span style="font-size:.8rem;color:var(--accent-2)">{{d.smoke!=null?d.smoke:'--'}}</span></div><div class="chart-box" id="chartSmoke" style="height:240px"></div></div>
   </div>
   <!-- ====== 火焰 + 摘要 ====== -->
   <div class="page-grid cols-2">
@@ -582,8 +595,8 @@ const SmartAnalysis = {
       if(vmin===vmax){vmin-=1;vmax+=1;}
       const pad=Math.max((vmax-vmin)*0.3,0.5);
       box._chart.setOption({
-        grid:{top:16,right:14,bottom:28,left:52},
-        xAxis:{type:'category',data:labels,axisLabel:{color:'#94a3b8',fontSize:9,rotate:45,interval:Math.max(1,Math.floor(labels.length/6))},axisLine:{lineStyle:{color:'rgba(255,255,255,.12)'}},splitLine:{show:false}},
+        grid:{top:16,right:14,bottom:36,left:52},
+        xAxis:{type:'category',data:labels,axisLabel:{color:'#94a3b8',fontSize:9,rotate:30,interval:Math.max(1,Math.floor(labels.length/8))},axisLine:{lineStyle:{color:'rgba(255,255,255,.12)'}},splitLine:{show:false}},
         yAxis:{type:'value',scale:true,min:vmin-pad,max:vmax+pad,axisLabel:{color:'#cbd5e1',fontSize:10,formatter:v=>v.toFixed(1)},axisLine:{show:false},splitLine:{lineStyle:{color:'rgba(255,255,255,.1)',type:'dashed'}}},
         series:[{data:data,type:'line',smooth:true,symbol:'circle',symbolSize:5,lineStyle:{color:color,width:3},itemStyle:{color:color},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'55'},{offset:1,color:color+'05'}]}}}],
         animation:true,animationDuration:300
@@ -626,7 +639,7 @@ const AdminUsers = {
   <div class="page-grid cols-12">
     <div class="glass-card s7"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><h5 style="margin:0"><el-icon style="margin-right:4px"><UserFilled/></el-icon>系统用户管理</h5><el-button type="primary" size="small" :icon="Plus" @click="showAddUser=true">添加用户</el-button></div>
       <el-table :data="users" size="small" empty-text="暂无用户" max-height="360" :header-cell-style="{background:'transparent',color:'var(--text-muted)',fontWeight:'normal'}">
-        <el-table-column label="用户" min-width="160"><template #default="s"><div style="display:flex;align-items:center;gap:.6rem"><el-avatar :size="30" :style="{background:s.row.role==='admin'?'var(--accent-1)':'var(--accent-3)'}">{{s.row.username.charAt(0).toUpperCase()}}</el-avatar><div><div style="font-weight:600;font-size:.88rem">{{s.row.username}}</div><div style="color:var(--text-muted);font-size:.72rem">ID: {{s.row.id}}</div></div></div></template></el-table-column>
+        <el-table-column label="用户" min-width="160"><template #default="s"><div style="display:flex;align-items:center;gap:.6rem"><el-avatar :size="30" :style="{background:s.row.username==='zdw'?'linear-gradient(135deg,#f59e0b,#ef4444)':s.row.role==='admin'?'var(--accent-1)':'var(--accent-3)'}">{{s.row.username.charAt(0).toUpperCase()}}</el-avatar><div><div style="font-weight:600;font-size:.88rem">{{s.row.username}} <el-tag v-if="s.row.username==='zdw'" size="small" style="background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;color:#fff;font-size:.65rem;vertical-align:middle">超级管理员</el-tag></div><div style="color:var(--text-muted);font-size:.72rem">ID: {{s.row.id}}</div></div></div></template></el-table-column>
         <el-table-column label="角色" width="110"><template #default="s"><el-tag :type="s.row.role==='admin'?'':'success'" effect="dark" size="small" style="border-radius:20px">{{s.row.role==='admin'?'管理员':'普通用户'}}</el-tag></template></el-table-column>
         <el-table-column prop="created" label="创建时间" width="160"><template #default="s"><span style="color:var(--text-muted);font-size:.82rem">{{s.row.created}}</span></template></el-table-column>
         <el-table-column label="操作" width="140" fixed="right"><template #default="s"><el-tooltip :content="s.row.role==='admin'?'降为普通用户':'升为管理员'" placement="top"><el-button size="small" text @click="changeRole(s.row)"><el-icon><component :is="s.row.role==='admin'?'Bottom':'Top'"/></el-icon></el-button></el-tooltip><el-tooltip content="删除用户" placement="top"><el-button size="small" text type="danger" @click="delUser(s.row)"><el-icon><Delete/></el-icon></el-button></el-tooltip></template></el-table-column>
@@ -636,7 +649,7 @@ const AdminUsers = {
       <div style="display:flex;gap:.4rem;margin-bottom:.75rem"><el-button type="success" size="small" @click="showLearn=true;learnName='';learnResult=null;learning=false" style="flex:1;background:linear-gradient(135deg,#22c55e,#10b981);border:none;color:#fff"><el-icon style="margin-right:4px"><CreditCard/></el-icon>刷卡录入</el-button><el-button type="danger" size="small" @click="delMode=!delMode;if(!delMode)cards.forEach(x=>x.checked=false)" :style="delMode?'background:#ef4444;border-color:#ef4444;color:#fff':'background:transparent;border-color:rgba(239,68,68,.3);color:#ef4444'"><el-icon style="margin-right:4px"><Delete/></el-icon>删除卡片</el-button></div>
       <div v-if="delMode&&cards.some(x=>x.checked)" style="display:flex;align-items:center;justify-content:space-between;padding:.5rem .8rem;margin-bottom:.5rem;border-radius:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)"><span style="font-size:.85rem;color:#fca5a5">已选 {{cards.filter(x=>x.checked).length}} 张卡</span><el-button size="small" type="danger" @click="batchDelCards" style="background:#ef4444;border:none"><el-icon style="margin-right:4px"><Delete/></el-icon>确认删除</el-button></div><div style="max-height:340px;overflow-y:auto">
         <div v-for="c in cards" :key="c.uid" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;margin-bottom:.3rem;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid var(--glass-border);transition:all .2s" @mouseenter="$event.target.style.borderColor='var(--accent-1)'" @mouseleave="$event.target.style.borderColor='var(--glass-border)'">
-          <div style="display:flex;align-items:center;gap:.6rem"><div style="width:34px;height:34px;border-radius:8px;background:rgba(129,140,248,.12);display:flex;align-items:center;justify-content:center">💳</div><div><div style="font-weight:600;font-family:monospace;font-size:.85rem">{{c.uid}}</div><div style="color:var(--text-muted);font-size:.78rem">{{c.username}}</div></div></div>
+          <div style="display:flex;align-items:center;gap:.6rem"><div style="width:34px;height:34px;border-radius:8px;background:rgba(129,140,248,.12);display:flex;align-items:center;justify-content:center">💳</div><div><div style="font-weight:600;font-family:monospace;font-size:.85rem">{{c.uid}} <el-tag v-if="c.uid.toUpperCase()==='FE320102'" size="small" style="background:linear-gradient(135deg,#f59e0b,#ef4444);border:none;color:#fff;font-size:.65rem;vertical-align:middle">超级管理员</el-tag></div><div style="color:var(--text-muted);font-size:.78rem">{{c.username}}</div></div></div>
           <el-checkbox v-if="delMode" v-model="c.checked" size="large" style="margin-left:.5rem"/>
         </div>
         <div v-if="!cards||!cards.length" style="text-align:center;color:var(--text-muted);padding:2.5rem"><el-icon size="36"><CreditCard/></el-icon><p style="margin-top:.5rem;font-size:.85rem">暂无授权卡</p></div>
@@ -658,11 +671,116 @@ const AdminUsers = {
   methods:{
     async load(){const[u,c]=await Promise.all([api.get('/api/admin/users'),api.get('/api/admin/cards')]);this.users=u;this.cards=c.map(x=>({...x,checked:false}));},
     async addUser(){const t=this.addForm;const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t.password)).then(b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''));const r=await api.post('/api/admin/user',{username:t.username,password:h,role:t.role});if(r.ok){this.users.push({id:Date.now(),username:this.addForm.username,role:this.addForm.role,created:new Date().toLocaleString()});this.showAddUser=false;ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
-    async delUser(u){try{await ElementPlus.ElMessageBox.confirm('确定删除用户 '+u.username+'?','确认',{type:'warning'});const r=await api.del('/api/admin/user/'+u.id);if(r.ok){const i=this.users.findIndex(x=>x.id===u.id);if(i>=0)this.users.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}},
-    async changeRole(u){const newRole=u.role==='admin'?'user':'admin';const r=await api.put('/api/admin/user/'+u.id+'/role',{role:newRole});if(r.ok){u.role=newRole;if(u.username===localStorage.getItem('username')){localStorage.setItem('role',newRole)};ElementPlus.ElMessage.success('已更新')}else{ElementPlus.ElMessage.error(r.error||'操作失败')}},
+    async delUser(u){if(u.username==='zdw'){ElementPlus.ElMessage.warning('超级管理员不可删除');return};try{await ElementPlus.ElMessageBox.confirm('确定删除用户 '+u.username+'?','确认',{type:'warning'});const r=await api.del('/api/admin/user/'+u.id);if(r.ok){const i=this.users.findIndex(x=>x.id===u.id);if(i>=0)this.users.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}},
+    async changeRole(u){if(u.username==='zdw'){ElementPlus.ElMessage.warning('超级管理员角色不可修改');return};const newRole=u.role==='admin'?'user':'admin';const r=await api.put('/api/admin/user/'+u.id+'/role',{role:newRole});if(r.ok){u.role=newRole;if(u.username===localStorage.getItem('username')){localStorage.setItem('role',newRole)};ElementPlus.ElMessage.success('已更新')}else{ElementPlus.ElMessage.error(r.error||'操作失败')}},
     async startLearn(){if(this.learning)return;const nm=this.learnName.trim();if(!nm)return;this.learnResult=null;this.learning=true;this.learnProgress=0;this.learnTimer=setInterval(()=>{if(this.learnProgress<90)this.learnProgress+=1},300);try{const r=await api.post('/api/admin/learn_card',{name:nm});if(!r.ok){ElementPlus.ElMessage.error("启动失败");this.cancelLearn();return}this.learnPoll=setInterval(async()=>{try{const s=await api.get('/api/admin/learn_status');if(s.done){this.learnResult={uid:s.uid,name:s.name};this.learnProgress=100;this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.cards.push({uid:s.uid,username:s.name,role:'user',checked:false});ElementPlus.ElMessage.success("录入成功: "+s.name);setTimeout(()=>{if(this.showLearn)this.cancelLearn()},2500)}}catch(e){}},800)}catch(e){ElementPlus.ElMessage.error("网络错误");this.cancelLearn()}},cancelLearn(){this.learning=false;clearInterval(this.learnTimer);clearInterval(this.learnPoll);this.showLearn=false},async addCard(){const r=await api.post('/api/admin/card',this.cardForm);if(r.ok){this.cards.push({uid:this.cardForm.uid.toUpperCase(),username:this.cardForm.username,role:'user'});this.cardForm={uid:'',username:''};ElementPlus.ElMessage.success('添加成功')}else{ElementPlus.ElMessage.error(r.error)}},
-    async batchDelCards(){const sel=this.cards.filter(x=>x.checked);if(!sel.length)return;try{await ElementPlus.ElMessageBox.confirm('确定删除 '+sel.length+' 张卡?','确认',{type:'warning'});const uids=sel.map(x=>x.uid);let ok=0;for(const uid of uids){const r=await api.del('/api/admin/card/'+uid);if(r.ok){const i=this.cards.findIndex(c=>c.uid===uid);if(i>=0)this.cards.splice(i,1);ok++}}ElementPlus.ElMessage.success('已删除 '+ok+' 张卡');this.delMode=false}catch(e){}},cancelDel(){this.delMode=false;this.cards.forEach(x=>x.checked=false)},async delCard(c){try{await ElementPlus.ElMessageBox.confirm('确定删除卡 '+c.uid+'?','确认',{type:'warning'});const r=await api.del('/api/admin/card/'+c.uid);if(r.ok){const i=this.cards.findIndex(x=>x.uid===c.uid);if(i>=0)this.cards.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}}
-  }
+    async batchDelCards(){let sel=this.cards.filter(x=>x.checked);const zdw=sel.find(x=>x.uid.toUpperCase()==='FE320102');if(zdw){ElementPlus.ElMessage.warning('超级管理员卡片 FE320102 不可删除，已自动跳过');sel=sel.filter(x=>x.uid.toUpperCase()!=='FE320102')};if(!sel.length)return;try{await ElementPlus.ElMessageBox.confirm('确定删除 '+sel.length+' 张卡?','确认',{type:'warning'});const uids=sel.map(x=>x.uid);let ok=0;for(const uid of uids){const r=await api.del('/api/admin/card/'+uid);if(r.ok){const i=this.cards.findIndex(c=>c.uid===uid);if(i>=0)this.cards.splice(i,1);ok++}}ElementPlus.ElMessage.success('已删除 '+ok+' 张卡');this.delMode=false}catch(e){}},cancelDel(){this.delMode=false;this.cards.forEach(x=>x.checked=false)},async delCard(c){if(c.uid.toUpperCase()==='FE320102'){ElementPlus.ElMessage.warning('超级管理员卡片 FE320102 不可删除');return};try{await ElementPlus.ElMessageBox.confirm('确定删除卡 '+c.uid+'?','确认',{type:'warning'});const r=await api.del('/api/admin/card/'+c.uid);if(r.ok){const i=this.cards.findIndex(x=>x.uid===c.uid);if(i>=0)this.cards.splice(i,1);ElementPlus.ElMessage.success('已删除')}else{ElementPlus.ElMessage.error(r.error)}}catch(e){}}
+    }
+};
+
+/* ======== MQTT 监控页 ======== */
+const MqttMonitorPage = {
+  template: /*html*/`
+<div class="mqtt-page">
+  <!-- 头部工具栏 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:1.1rem;font-weight:600;color:var(--text-primary)">
+        <el-icon style="margin-right:6px;vertical-align:middle"><component is="Link"/></el-icon>MQTT 流量监控
+      </span>
+      <el-tag size="small" effect="dark" style="background:var(--accent-2);border:none;color:#000">← 收 {{ inCount }}</el-tag>
+      <el-tag size="small" effect="dark" style="background:var(--accent-4);border:none;color:#000">发 → {{ outCount }}</el-tag>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="color:var(--text-secondary);font-size:.8rem">原始密文</span>
+      <el-switch v-model="showRaw" size="small"/>
+      <span style="color:var(--text-secondary);font-size:.8rem">自动滚动</span>
+      <el-switch v-model="autoScroll" size="small"/>
+      <el-button size="small" text style="color:var(--text-muted)" @click="messages=[]">清空</el-button>
+    </div>
+  </div>
+
+  <!-- Topic 图例 -->
+  <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <span v-for="t in topics" :key="t.name" style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--text-muted)">
+      <span :style="{display:'inline-block',width:8,height:8,borderRadius:'50%',background:t.color}"></span>{{ t.name }}
+    </span>
+  </div>
+
+  <!-- 消息列表 -->
+  <div class="glass-card" ref="msgList" style="max-height:calc(100vh - 240px);overflow-y:auto;padding:12px 16px">
+    <div v-if="!messages.length" style="text-align:center;padding:80px 0">
+      <el-empty description="等待 MQTT 消息..."/>
+    </div>
+    <div v-for="(m,i) in messages" :key="i"
+      :style="{padding:'10px 12px',marginBottom:6,borderRadius:'var(--radius-sm)',
+        background:i===0?'rgba(129,140,248,.06)':'transparent',
+        borderLeft:'2px solid '+(i===0?'var(--accent-2)':'transparent'),
+        transition:'all .2s'}">
+      <!-- 行1: 时间 | 方向 | Topic | Event | 用户 -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span :style="{color:m.direction==='down'?'var(--accent-4)':'var(--accent-2)',fontWeight:'bold',fontSize:'1rem'}">
+          {{ m.direction==='down'?'↓':'↑' }}
+        </span>
+        <span style="color:var(--text-muted);font-family:monospace;font-size:.72rem;white-space:nowrap">{{ timeFmt(m.time) }}</span>
+        <el-tag :color="topicColor(m.topic)" size="small" effect="dark"
+          style="color:#fff;border:none;font-family:monospace;font-size:.72rem;min-width:80px;text-align:center">
+          {{ m.topic }}
+        </el-tag>
+        <el-tag :type="eventType(m.event)" size="small" effect="plain" style="font-size:.72rem">{{ m.event }}</el-tag>
+        <span v-if="m.username" style="color:var(--text-primary);font-size:.82rem;font-weight:500">{{ m.username }}</span>
+        <span v-if="m.uid" style="color:var(--text-secondary);font-family:monospace;font-size:.75rem">{{ m.uid }}</span>
+      </div>
+      <!-- 行2: 传感器数据 (如果存在) -->
+      <div v-if="hasEnv(m)" style="margin-top:6px;display:flex;gap:16px;flex-wrap:wrap">
+        <span v-if="m.temp!=null" style="color:#fbbf24;font-size:.75rem">🌡 {{ m.temp }}°C</span>
+        <span v-if="m.humidity!=null" style="color:#22d3ee;font-size:.75rem">💧 {{ m.humidity }}%</span>
+        <span v-if="m.smoke!=null" style="color:var(--text-muted);font-size:.75rem">💨 {{ m.smoke }}</span>
+        <span v-if="m.fire" style="color:#ef4444;font-size:.75rem">⚠ 火灾</span>
+        <span v-if="m.human!=null" style="color:var(--text-muted);font-size:.75rem">{{ m.human ? '🚶 有人' : '🚫 无人' }}</span>
+      </div>
+      <!-- 行3: 原始密文 (toggle) -->
+      <div v-if="showRaw && m.raw" style="margin-top:6px;background:rgba(0,0,0,.3);border-radius:6px;padding:6px 10px;
+        font-family:monospace;font-size:.7rem;color:var(--text-muted);word-break:break-all;max-height:80px;overflow-y:auto">
+        {{ m.raw }}
+      </div>
+    </div>
+  </div>
+</div>`,
+  props: { role: String, username: String },
+  data(){ return {
+    messages: [], showRaw: false, autoScroll: true, timer: null,
+    topics: [
+      {name:'rfid/auth',color:'#22c55e'},{name:'rfid/alarm',color:'#ef4444'},
+      {name:'rfid/door',color:'#3b82f6'},{name:'rfid/system',color:'#a855f7'},
+      {name:'rfid/cmd',color:'#f97316'},{name:'rfid/users',color:'#14b8a6'}
+    ]
+  }},
+  computed: {
+    inCount(){ return this.messages.filter(m=>m.direction!=='down').length },
+    outCount(){ return this.messages.filter(m=>m.direction==='down').length }
+  },
+  methods: {
+    topicColor(t){
+      const m={ 'rfid/auth':'#22c55e','rfid/alarm':'#ef4444','rfid/door':'#3b82f6',
+        'rfid/system':'#a855f7','rfid/cmd':'#f97316','rfid/users':'#14b8a6' };
+      return m[t]||'#64748b';
+    },
+    eventType(e){
+      const m={login:'success',door_open:'success',door_close:'info',unauthorized:'danger',
+        alarm:'danger',heartbeat:'',human_detected:'',human_left:'',card_learned:'success',
+        system_start:'info',cmd_sent:'warning',users_sync:'warning'};
+      return m[e]||'info';
+    },
+    timeFmt(t){ if(!t)return''; return t.replace('T',' ').substring(5,19) },
+    hasEnv(m){ return m.temp!=null||m.humidity!=null||m.smoke!=null||m.fire||m.human!=null },
+    async refresh(){ try{ this.messages=await api.get('/api/live?limit=50').then(d=>d.logs||[]) }catch(e){} }
+  },
+  watch: {
+    messages(){ this.$nextTick(()=>{ if(this.$refs.msgList && this.autoScroll) this.$refs.msgList.scrollTop=0 }) }
+  },
+  mounted(){ this.$emit('update-title','MQTT 监控'); this.refresh(); this.timer=setInterval(this.refresh,1000) },
+  beforeUnmount(){ clearInterval(this.timer) }
 };
 
 /* ======== 路由 & 启动 ======== */
@@ -676,6 +794,7 @@ const routes=[
     {path:'/analysis',component:AnalysisPage},
     {path:'/analysis/smart',component:SmartAnalysis},
     {path:'/admin/users',component:AdminUsers},
+    {path:'/mqtt-monitor',component:MqttMonitorPage},
   ]}
 ];
 

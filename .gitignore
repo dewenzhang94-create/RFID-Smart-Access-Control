@@ -26,6 +26,7 @@ Thumbs.db
 
 # Secrets (contains API keys)
 server/config.py
+server/*.pem
 
 # Temp / tools
 tools/i2c_scanner/
