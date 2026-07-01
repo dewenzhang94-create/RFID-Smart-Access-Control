@@ -59,7 +59,7 @@ live_data = {
     'online': False,     # ESP32 是否在线
     'last_heartbeat': '',
 }
-live_lock = threading.Lock()
+live_lock = threading.RLock()  # 可重入锁，防止 card_learned→publish_cmd 死锁
 
 
 # ============================================

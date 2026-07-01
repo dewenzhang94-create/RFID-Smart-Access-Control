@@ -381,7 +381,7 @@ const Dashboard = {
       return m[e]||'#64748b';
     },
     async refresh(){try{const[r1,r2]=await Promise.all([api.get('/api/stats'),api.get('/api/live')]);this.stats=r1;this.live=r2}catch(e){} },
-    async cmd(c){try{const r=await api.post('/api/cmd',{cmd:c});ElMessage[r.ok?'success':'error'](r.ok?'指令已发送':r.error)}catch(e){ElementPlus.ElMessage.error('发送失败')}}
+    async cmd(c){try{const r=await api.post('/api/cmd',{cmd:c});ElementPlus.ElMessage[r.ok?'success':'error'](r.ok?'指令已发送':r.error)}catch(e){ElementPlus.ElMessage.error('发送失败')}}
   }
 };
 
