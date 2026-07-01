@@ -314,6 +314,15 @@ A: 阈值定义在 `include/env_sensor.h` 的 `SMOKE_THRESHOLD`，默认 3700。
 **Q: ESP32 频繁重启？**
 A: `platformio.ini` 中 `-DARDUINO_LOOP_STACK_SIZE=16384` 为必须项，删除会导致栈溢出崩溃。
 
+**Q: 刷卡录入或远程控制点按钮没反应，网页一直转圈？**
+A: 通常是 MQTT 回调中发生线程死锁。确认 `server/web_app.py` 中 `live_lock` 使用了 `threading.RLock()`（可重入锁）而非 `threading.Lock()`。重启 Flask 服务即可恢复。
+
+**Q: 仪表盘点开门/锁门，舵机实际动了但页面显示"发送失败"？**
+A: CDN 模式下 `ElMessage` 需要写成 `ElementPlus.ElMessage`。已在最新版修复，刷新 `Ctrl+Shift+F5` 强制更新缓存。
+
+**Q: SG90 舵机不转？**
+A: 舵机必须接 5V 供电（ESP32 VIN 引脚），不能接 3.3V。接线：红线→5V(VIN)、棕线→GND、橙线→GPIO14。上电瞬间舵机会微微抖动一下表示初始化成功。
+
 ## 技术栈总结
 
 | 层级 | 技术 |
